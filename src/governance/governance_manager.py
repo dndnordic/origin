@@ -40,6 +40,8 @@ class GovernanceManager:
             "yubikey_required": True,
             "approval_timeout_hours": 48,
             "emergency_contact": "mikael@dndnordic.se",
+            "admin_username": "mhugo",          # Internal system username for Mikael
+            "admin_display_name": "Mikael Hugo", # Display name for notifications and logs
             "notification_channels": ["email", "sms", "telegram"],
             "api_port": 8000
         }
@@ -131,8 +133,8 @@ class GovernanceManager:
                 return False
         
         # Verify approver has authority
-        if self.config["approval_threshold"] == "mikael_only" and approver != "mikael":
-            logger.error(f"Only Mikael can approve proposals, but approver was {approver}")
+        if self.config["approval_threshold"] == "mikael_only" and approver not in ["mhugo", "Mikael Hugo"]:
+            logger.error(f"Only Mikael Hugo (mhugo) can approve proposals, but approver was {approver}")
             return False
         
         # Update proposal status
@@ -183,8 +185,8 @@ class GovernanceManager:
                 return False
         
         # Verify approver has authority
-        if self.config["approval_threshold"] == "mikael_only" and approver != "mikael":
-            logger.error(f"Only Mikael can reject proposals, but rejector was {approver}")
+        if self.config["approval_threshold"] == "mikael_only" and approver not in ["mhugo", "Mikael Hugo"]:
+            logger.error(f"Only Mikael Hugo (mhugo) can reject proposals, but rejector was {approver}")
             return False
         
         # Update proposal status

@@ -97,7 +97,7 @@ async def verify_token(
     # In a real implementation, this would validate a JWT or session token
     # For this example, we'll use a simple validation
     if token.startswith("Bearer mikael_"):
-        return "mikael"
+        return "mhugo"  # Internal username for Mikael
     elif token.startswith("Bearer singularity_"):
         return "singularity"
     
@@ -174,10 +174,10 @@ async def get_proposals(
         ApiResponse: API response with list of proposals
     """
     # Only Mikael can see all proposals
-    if user_id != "mikael":
+    if user_id != "mhugo":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only Mikael can view all proposals"
+            detail="Only Mikael Hugo can view all proposals"
         )
     
     proposals = governance_manager.get_pending_proposals()
@@ -250,10 +250,10 @@ async def approve_proposal(
         ApiResponse: API response with approval result
     """
     # Only Mikael can approve proposals
-    if user_id != "mikael":
+    if user_id != "mhugo":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only Mikael can approve proposals"
+            detail="Only Mikael Hugo can approve proposals"
         )
     
     # YubiKey validation is required
@@ -305,10 +305,10 @@ async def reject_proposal(
         ApiResponse: API response with rejection result
     """
     # Only Mikael can reject proposals
-    if user_id != "mikael":
+    if user_id != "mhugo":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only Mikael can reject proposals"
+            detail="Only Mikael Hugo can reject proposals"
         )
     
     # YubiKey validation is required
