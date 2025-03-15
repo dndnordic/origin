@@ -1,0 +1,15 @@
+# Mikael's Governance System CODEOWNERS File
+# This file defines code ownership and required reviewers
+
+# Global rule - Mikael must review all changes
+*       @mikkihugo
+
+# Core governance components
+/src/governance/        @mikkihugo
+/kubernetes/            @mikkihugo @dnd-genesis
+/docs/                  @mikkihugo @dnd-genesis
+
+# Security-critical files
+*.key                   @mikkihugo
+/src/auth/              @mikkihugo
+/configs/sensitive/     @mikkihugo
