@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Governance API server
+  governance-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GOVERNANCE_API_PORT=8000
+      # YubiKey configuration (replace with secrets in production)
+      - PRIMARY_YUBIKEY_ID=mikael-primary-yubikey
+      - PRIMARY_YUBIKEY_SECRET=${PRIMARY_YUBIKEY_SECRET:-test-secret-key}
+      - PRIMARY_YUBIKEY_COUNTER=${PRIMARY_YUBIKEY_COUNTER:-0}
+      # ImmuDB connection
+      - IMMUDB_HOST=immudb
+      - IMMUDB_PORT=3322
+      - IMMUDB_USER=immudb
+      - IMMUDB_PASSWORD=${IMMUDB_PASSWORD:-immudb}
+      - IMMUDB_DATABASE=governance
+    depends_on:
+      - immudb
+      - eventstore
+    volumes:
+      - ./src:/app/src
+    restart: unless-stopped
+    networks:
+      - governance-network
+
+  # ImmuDB for tamper-proof storage
+  immudb:
+    image: codenotary/immudb:latest
+    environment:
+      - IMMUDB_ADDRESS=0.0.0.0
+      - IMMUDB_PORT=3322
+      - IMMUDB_AUTH=true
+      - IMMUDB_ADMIN_PASSWORD=${IMMUDB_PASSWORD:-immudb}
+      - IMMUDB_MAINTENANCE=false
+    volumes:
+      - immudb-data:/var/lib/immudb
+    ports:
+      - "3322:3322"
+      - "9497:9497" # Metrics
+    restart: unless-stopped
+    networks:
+      - governance-network
+
+  # EventStore for event sourcing
+  eventstore:
+    image: eventstore/eventstore:21.10.0-buster-slim
+    environment:
+      - EVENTSTORE_CLUSTER_SIZE=1
+      - EVENTSTORE_RUN_PROJECTIONS=All
+      - EVENTSTORE_START_STANDARD_PROJECTIONS=true
+      - EVENTSTORE_INSECURE=true  # For development only
+      - EVENTSTORE_ENABLE_ATOM_PUB_OVER_HTTP=true
+    volumes:
+      - eventstore-data:/var/lib/eventstore
+    ports:
+      - "1113:1113"  # TCP
+      - "2113:2113"  # HTTP
+    restart: unless-stopped
+    networks:
+      - governance-network
+
+volumes:
+  immudb-data:
+  eventstore-data:
+
+networks:
+  governance-network:
+    driver: bridge
