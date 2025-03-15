@@ -40,6 +40,8 @@ class GovernanceManager:
             "yubikey_required": True,
             "approval_timeout_hours": 48,
             "emergency_contact": "mikael@dndnordic.se",
+            "admin_username": "mhugo",          # Internal system username for Mikael
+            "admin_display_name": "Mikael Hugo", # Display name for notifications and logs
             "notification_channels": ["email", "sms", "telegram"],
             "api_port": 8000
         }
@@ -131,8 +133,8 @@ class GovernanceManager:
                 return False
         
         # Verify approver has authority
-        if self.config["approval_threshold"] == "mikael_only" and approver != "mikael":
-            logger.error(f"Only Mikael can approve proposals, but approver was {approver}")
+        if self.config["approval_threshold"] == "mikael_only" and approver not in ["mhugo", "Mikael Hugo"]:
+            logger.error(f"Only Mikael Hugo (mhugo) can approve proposals, but approver was {approver}")
             return False
         
         # Update proposal status
@@ -183,8 +185,8 @@ class GovernanceManager:
                 return False
         
         # Verify approver has authority
-        if self.config["approval_threshold"] == "mikael_only" and approver != "mikael":
-            logger.error(f"Only Mikael can reject proposals, but rejector was {approver}")
+        if self.config["approval_threshold"] == "mikael_only" and approver not in ["mhugo", "Mikael Hugo"]:
+            logger.error(f"Only Mikael Hugo (mhugo) can reject proposals, but rejector was {approver}")
             return False
         
         # Update proposal status
@@ -225,10 +227,40 @@ class GovernanceManager:
     def _record_decision(self, proposal: Dict[str, Any]) -> None:
         """
         Record governance decision in all storage systems for redundancy.
-        In a real implementation, this would write to multiple databases.
+        Uses the TripleStoreManager to ensure tamper-proof, redundant storage.
         """
-        # Placeholder - would implement actual storage
-        logger.info(f"Decision for proposal {proposal['proposal_id']} recorded")
+        try:
+            from ..database.triple_store_manager import TripleStoreManager
+            
+            # Initialize triple store manager
+            store_manager = TripleStoreManager()
+            
+            # Determine record type based on proposal status
+            if proposal['status'] == 'approved':
+                record_type = 'approval'
+            elif proposal['status'] == 'rejected':
+                record_type = 'rejection'
+            else:
+                record_type = 'decision'
+            
+            # Store the decision in all three systems
+            record_id = store_manager.store_governance_record(
+                record_type=record_type,
+                authority=proposal.get('approver', proposal.get('rejector', 'governance_system')),
+                content=proposal
+            )
+            
+            if record_id:
+                logger.info(f"Decision for proposal {proposal['proposal_id']} recorded with ID {record_id}")
+            else:
+                logger.error(f"Failed to record decision for proposal {proposal['proposal_id']}")
+        except ImportError:
+            # Fallback if triple store is not available
+            logger.warning("Triple store not available, decision not recorded permanently")
+        except Exception as e:
+            logger.error(f"Error recording decision: {e}")
+            # Important: This is a critical error, but we don't want to block the decision process
+            # In a real implementation, you might trigger an alert or retry mechanism
     
     def run_api_server(self) -> None:
         """Run the governance API server to receive proposals and provide decisions."""

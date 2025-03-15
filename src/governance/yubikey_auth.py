@@ -97,7 +97,7 @@ class YubiKeyManager:
             Optional[str]: Session token if successful, None otherwise
         """
         # For Mikael, YubiKey validation is required
-        if user_id == "mikael" and yubikey_otp:
+        if user_id in ["mhugo", "Mikael Hugo"] and yubikey_otp:
             if not self.validate_yubikey(yubikey_otp):
                 logger.error("Authentication failed - invalid YubiKey OTP")
                 return None
