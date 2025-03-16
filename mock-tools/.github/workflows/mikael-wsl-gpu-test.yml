@@ -1,0 +1,97 @@
+name: Test Mikael WSL GPU Runner
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-wsl-gpu:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Display runner information
+      run: |
+        echo "Running on: $env:COMPUTERNAME"
+        echo "OS: $env:OS"
+        wsl hostname
+        
+    - name: Test WSL Access
+      run: |
+        echo "Testing WSL environment..."
+        wsl bash -c "uname -a"
+        wsl bash -c "cat /etc/os-release | grep PRETTY_NAME"
+        
+    - name: Test GPU Access
+      run: |
+        echo "Testing GPU access in WSL..."
+        wsl bash -c "command -v nvidia-smi && nvidia-smi || echo 'NVIDIA tools not installed'"
+        wsl bash -c "python3 -c 'import torch; print(\"CUDA available:\", torch.cuda.is_available())' || echo 'PyTorch not installed'"
+        
+    - name: Test WSL Connector
+      run: |
+        echo "Testing connection to port 8000..."
+        wsl bash -c "command -v nc && nc -zv localhost 8000 || echo 'Netcat not installed or port not listening'"
+        
+    - name: Setup for Origin
+      run: |
+        echo "Setting up Origin environment..."
+        mkdir -p test-output
+        
+        # Create a simple test script in WSL
+        wsl bash -c "cat > ~/test-gpu.py << EOF
+        import os
+        import platform
+        import socket
+        import sys
+        
+        print('\\n===== System Information =====')
+        print(f'Hostname: {platform.node()}')
+        print(f'System: {platform.system()} {platform.release()}')
+        print(f'Python: {platform.python_version()}')
+        
+        # Try to import key packages
+        packages = ['torch', 'fastapi', 'uvicorn']
+        print('\\n===== Package Availability =====')
+        for package in packages:
+            try:
+                __import__(package)
+                print(f'{package}: Available')
+            except ImportError:
+                print(f'{package}: Not available')
+        
+        # Test GPU access
+        try:
+            import torch
+            print('\\n===== GPU Information =====')
+            print(f'CUDA available: {torch.cuda.is_available()}')
+            if torch.cuda.is_available():
+                print(f'CUDA version: {torch.version.cuda}')
+                print(f'Device count: {torch.cuda.device_count()}')
+                for i in range(torch.cuda.device_count()):
+                    print(f'Device {i}: {torch.cuda.get_device_name(i)}')
+        except:
+            print('Failed to access GPU information')
+        
+        # Test network connectivity
+        print('\\n===== Network Information =====')
+        print(f'Hostname: {socket.gethostname()}')
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind(('0.0.0.0', 8000))
+            print('Port 8000 is available')
+            s.close()
+        except socket.error:
+            print('Port 8000 is in use (connector may be running)')
+        EOF"
+        
+        # Run the test script in WSL
+        wsl bash -c "python3 ~/test-gpu.py > ~/test-result.txt || echo 'Failed to run test script'" 
+        wsl bash -c "cat ~/test-result.txt"
+        
+        # Copy results to Windows
+        wsl bash -c "cat ~/test-result.txt" > test-output/results.txt
