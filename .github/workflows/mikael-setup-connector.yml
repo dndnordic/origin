@@ -1,0 +1,217 @@
+name: Mikael Setup WSL Connector
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-connector:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Dependencies
+      shell: cmd
+      timeout-minutes: 10
+      run: |
+        echo Installing dependencies...
+        wsl bash -c "cd ~/origin-llm && source venv/bin/activate && pip install transformers accelerate huggingface_hub"
+        wsl bash -c "cd ~/origin-llm && source venv/bin/activate && pip install fastapi uvicorn pydantic"
+        
+    - name: Create Connector Service
+      shell: cmd
+      run: |
+        echo Creating connector service...
+        wsl bash -c "cat > ~/origin-wsl-connector.py << 'EOF'
+        #!/usr/bin/env python3
+        \"\"\"
+        WSL GPU Connector Service for Origin System
+        This service enables Origin to access Mikael's GPU through WSL
+        \"\"\"
+        
+        import os
+        import sys
+        import json
+        import socket
+        import time
+        import threading
+        import logging
+        from datetime import datetime
+        
+        # Configure logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler(sys.stdout),
+                logging.FileHandler(os.path.expanduser('~/origin-connector.log'))
+            ]
+        )
+        logger = logging.getLogger(\"wsl-connector\")
+        
+        # Import PyTorch for GPU operations
+        try:
+            import torch
+            HAS_TORCH = True
+            logger.info(f\"PyTorch {torch.__version__} loaded successfully\")
+            logger.info(f\"CUDA available: {torch.cuda.is_available()}\")
+            if torch.cuda.is_available():
+                logger.info(f\"CUDA version: {torch.version.cuda}\")
+                logger.info(f\"GPU device count: {torch.cuda.device_count()}\")
+                for i in range(torch.cuda.device_count()):
+                    logger.info(f\"GPU {i}: {torch.cuda.get_device_name(i)}\")
+        except ImportError:
+            logger.error(\"PyTorch not available\")
+            HAS_TORCH = False
+        
+        class WSLConnectorService:
+            def __init__(self, host='0.0.0.0', port=8000):
+                self.host = host
+                self.port = port
+                self.server_socket = None
+                self.running = False
+                
+                # System information
+                self.system_info = {
+                    \"wsl_host\": os.environ.get('HOSTNAME', socket.gethostname()),
+                    \"gpu_available\": str(torch.cuda.is_available()).lower() if HAS_TORCH else \"false\",
+                    \"gpu_count\": str(torch.cuda.device_count()) if HAS_TORCH and torch.cuda.is_available() else \"0\",
+                    \"gpu_name\": torch.cuda.get_device_name(0) if HAS_TORCH and torch.cuda.is_available() and torch.cuda.device_count() > 0 else \"none\",
+                    \"start_time\": datetime.now().isoformat(),
+                    \"service_version\": \"1.0.0\"
+                }
+                
+                logger.info(f\"WSL Connector Service initialized on {self.host}:{self.port}\")
+                logger.info(f\"System info: {self.system_info}\")
+            
+            def handle_client(self, client_socket, addr):
+                \"\"\"Handle an individual client connection.\"\"\"
+                logger.info(f\"Connection from {addr}\")
+                
+                try:
+                    # First, send system info
+                    client_socket.sendall(json.dumps(self.system_info).encode('utf-8'))
+                    
+                    # Then listen for requests
+                    data = client_socket.recv(4096)
+                    if data:
+                        try:
+                            request = json.loads(data.decode('utf-8'))
+                            logger.info(f\"Received request: {request}\")
+                            
+                            # Echo back for testing
+                            response = {
+                                \"status\": \"ok\",
+                                \"received\": request,
+                                \"wsl_connector\": \"working\"
+                            }
+                            
+                            client_socket.sendall(json.dumps(response).encode('utf-8'))
+                        except json.JSONDecodeError:
+                            logger.error(f\"Invalid JSON received: {data.decode('utf-8')}\")
+                            client_socket.sendall(json.dumps({\"error\": \"Invalid JSON\"}).encode('utf-8'))
+                except Exception as e:
+                    logger.error(f\"Error handling client {addr}: {e}\")
+                finally:
+                    client_socket.close()
+            
+            def start(self):
+                \"\"\"Start the service.\"\"\"
+                self.running = True
+                self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                
+                try:
+                    self.server_socket.bind((self.host, self.port))
+                    self.server_socket.listen(5)
+                    logger.info(f\"Server started on {self.host}:{self.port}\")
+                    
+                    while self.running:
+                        try:
+                            client_socket, addr = self.server_socket.accept()
+                            client_thread = threading.Thread(target=self.handle_client, args=(client_socket, addr))
+                            client_thread.daemon = True
+                            client_thread.start()
+                        except Exception as e:
+                            if self.running:  # Only log if we're still supposed to be running
+                                logger.error(f\"Error accepting connection: {e}\")
+                                time.sleep(1)
+                except Exception as e:
+                    logger.error(f\"Server error: {e}\")
+                finally:
+                    self.stop()
+            
+            def stop(self):
+                \"\"\"Stop the service.\"\"\"
+                self.running = False
+                if self.server_socket:
+                    self.server_socket.close()
+                logger.info(\"Server stopped\")
+        
+        if __name__ == \"__main__\":
+            service = WSLConnectorService()
+            try:
+                service.start()
+            except KeyboardInterrupt:
+                logger.info(\"Service interrupted by user\")
+                service.stop()
+        EOF"
+        wsl bash -c "chmod +x ~/origin-wsl-connector.py"
+        
+    - name: Test Connector (10 seconds)
+      shell: cmd
+      run: |
+        echo Testing connector service (will run for 10 seconds)...
+        wsl bash -c "cd ~/origin-llm && source venv/bin/activate && nohup python ~/origin-wsl-connector.py > ~/connector-test.log 2>&1 & echo $! > ~/connector.pid && sleep 10 && kill -15 $(cat ~/connector.pid) || true"
+        wsl bash -c "cat ~/connector-test.log"
+        
+    - name: Create Service File
+      shell: cmd
+      run: |
+        echo Creating systemd service file...
+        wsl bash -c "cat > ~/wsl-connector.service << 'EOF'
+        [Unit]
+        Description=Origin WSL GPU Connector Service
+        After=network.target
+        
+        [Service]
+        Type=simple
+        User=$USER
+        WorkingDirectory=/home/$USER/origin-llm
+        ExecStart=/bin/bash -c \"source /home/$USER/origin-llm/venv/bin/activate && python /home/$USER/origin-wsl-connector.py\"
+        Restart=always
+        RestartSec=10
+        
+        [Install]
+        WantedBy=multi-user.target
+        EOF"
+        
+    - name: Setup Instructions
+      shell: cmd
+      run: |
+        echo Providing setup instructions...
+        echo Instructions for Mikael > mikael-setup-instructions.txt
+        echo ======================================== >> mikael-setup-instructions.txt
+        echo To activate the environment: >> mikael-setup-instructions.txt
+        echo wsl >> mikael-setup-instructions.txt 
+        echo ~/activate-origin-llm.sh >> mikael-setup-instructions.txt
+        echo. >> mikael-setup-instructions.txt
+        echo To start the connector service manually: >> mikael-setup-instructions.txt
+        echo wsl >> mikael-setup-instructions.txt
+        echo cd ~/origin-llm >> mikael-setup-instructions.txt
+        echo source venv/bin/activate >> mikael-setup-instructions.txt
+        echo python ~/origin-wsl-connector.py >> mikael-setup-instructions.txt
+        echo. >> mikael-setup-instructions.txt
+        echo To set up automatic start (optional): >> mikael-setup-instructions.txt
+        echo wsl >> mikael-setup-instructions.txt
+        echo sudo cp ~/wsl-connector.service /etc/systemd/system/ >> mikael-setup-instructions.txt
+        echo sudo systemctl daemon-reload >> mikael-setup-instructions.txt
+        echo sudo systemctl enable wsl-connector.service >> mikael-setup-instructions.txt
+        echo sudo systemctl start wsl-connector.service >> mikael-setup-instructions.txt
+        echo. >> mikael-setup-instructions.txt
+        echo **************************************** >> mikael-setup-instructions.txt
+        echo The WSL connector will listen on port 8000 >> mikael-setup-instructions.txt
+        echo for requests from the Origin system. >> mikael-setup-instructions.txt
+        echo **************************************** >> mikael-setup-instructions.txt
+        
+        type mikael-setup-instructions.txt

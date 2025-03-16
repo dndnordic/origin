@@ -1,0 +1,69 @@
+name: Mikael WSL Minimal Setup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-wsl-minimal:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Test WSL Environment
+      shell: cmd
+      run: |
+        echo Testing WSL environment...
+        wsl uname -a
+        wsl whoami
+        
+    - name: Test GPU Access
+      shell: cmd
+      run: |
+        echo Testing NVIDIA GPU...
+        wsl bash -c "nvidia-smi || echo 'nvidia-smi not available'"
+        
+    - name: Create Test Script
+      shell: cmd
+      run: |
+        echo Creating test script...
+        wsl bash -c "cat > ~/test-env.py << 'EOF'
+        import os
+        import sys
+        import platform
+        
+        print(f\"Hostname: {platform.node()}\")
+        print(f\"Python version: {sys.version}\")
+        print(f\"Platform: {platform.platform()}\")
+        print(f\"Working directory: {os.getcwd()}\")
+        print(f\"User: {os.getlogin()}\")
+        
+        # Check for NVIDIA driver
+        print(\"\\nChecking for NVIDIA driver:\")
+        try:
+            result = os.popen('nvidia-smi').read()
+            print(result)
+        except Exception as e:
+            print(f\"Error checking NVIDIA driver: {e}\")
+        EOF"
+        wsl bash -c "chmod +x ~/test-env.py"
+        
+    - name: Run Test Script
+      shell: cmd
+      run: |
+        echo Running test script...
+        wsl bash -c "python3 ~/test-env.py || python ~/test-env.py"
+        
+    - name: Install Basic Packages
+      shell: cmd
+      run: |
+        echo Installing basic packages...
+        wsl bash -c "sudo apt-get update && sudo apt-get install -y python3-pip python3-venv curl wget git"
+        
+    - name: Setup Minimal Environment
+      shell: cmd
+      run: |
+        echo Setting up minimal environment...
+        wsl bash -c "mkdir -p ~/origin-test"
+        wsl bash -c "echo 'Test successful' > ~/origin-test/setup-complete.txt"
+        wsl bash -c "cat ~/origin-test/setup-complete.txt"
