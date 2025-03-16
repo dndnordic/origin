@@ -6,6 +6,11 @@ metadata:
   labels:
     app: mikael-llm-connector
     component: gpu-inference
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+    origin.dndnordic.com/description: "Connector service for Mikael's WSL GPU environment"
+    origin.dndnordic.com/owner: "mikael"
+    origin.dndnordic.com/type: "gpu-inference"
 spec:
   selector:
     app: mikael-llm-connector
@@ -13,4 +18,6 @@ spec:
   - port: 5000
     targetPort: 5000
     name: http
+    protocol: TCP
   type: ClusterIP
+  publishNotReadyAddresses: true  # Enable connections even if pods aren't fully ready

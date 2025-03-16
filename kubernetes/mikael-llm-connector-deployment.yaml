@@ -11,11 +11,17 @@ spec:
   selector:
     matchLabels:
       app: mikael-llm-connector
+  strategy:
+    type: Recreate  # Ensure we only have one pod at a time for consistent connection
   template:
     metadata:
       labels:
         app: mikael-llm-connector
+      annotations:
+        kubernetes.io/config.seen: "true"
+        kubernetes.io/config.source: "api"
     spec:
+      terminationGracePeriodSeconds: 60  # Give time for connections to drain
       containers:
       - name: llm-connector
         image: vultrorigin/origin-llm-connector:latest
@@ -34,12 +40,47 @@ spec:
             configMapKeyRef:
               name: mikael-wsl-connector-config
               key: wsl_port
+        - name: RETRY_ATTEMPTS
+          valueFrom:
+            configMapKeyRef:
+              name: mikael-wsl-connector-config
+              key: retry_attempts
+              optional: true
+        - name: RETRY_DELAY_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: mikael-wsl-connector-config
+              key: retry_delay_seconds
+              optional: true
+        - name: CONNECTION_TIMEOUT_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: mikael-wsl-connector-config
+              key: connection_timeout_seconds
+              optional: true
         livenessProbe:
           httpGet:
             path: /health
             port: 5000
+          initialDelaySeconds: 60  # Increased initial delay for longer startup times
+          periodSeconds: 20
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 5000
           initialDelaySeconds: 30
           periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          periodSeconds: 10
+          failureThreshold: 30  # Allow 5 minutes for startup (30 * 10s)
         resources:
           requests:
             cpu: 100m
@@ -49,3 +90,4 @@ spec:
             memory: 512Mi
       imagePullSecrets:
       - name: vultr-registry-credentials
+      restartPolicy: Always
