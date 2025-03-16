@@ -1,0 +1,17 @@
+name: Mikael Simple Connect Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-connect:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Run PyTorch Test
+      shell: cmd
+      run: |
+        echo "Testing PyTorch with activate-origin-llm.sh script"
+        wsl bash -c ". ~/activate-origin-llm.sh && python -c 'import torch; print(\"CUDA available:\", torch.cuda.is_available()); print(\"GPU device:\", torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"none\")'"
