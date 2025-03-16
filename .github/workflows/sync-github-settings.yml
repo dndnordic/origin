@@ -1,0 +1,204 @@
+name: Sync GitHub Repository Settings
+
+on:
+  # Run weekly to ensure settings stay in sync
+  schedule:
+    - cron: '0 0 * * 0'  # Every Sunday at midnight
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      sync_branch_protection:
+        description: 'Sync branch protection rules'
+        required: false
+        default: true
+        type: boolean
+      sync_webhooks:
+        description: 'Sync webhook configurations'
+        required: false
+        default: true
+        type: boolean
+      sync_labels:
+        description: 'Sync repository labels'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  sync-settings:
+    name: Sync GitHub Settings
+    runs-on: self-hosted
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyGithub pyyaml
+
+      - name: Sync Branch Protection Rules
+        if: ${{ github.event.inputs.sync_branch_protection != 'false' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Syncing branch protection rules..."
+          python - << 'EOF'
+          import os
+          import yaml
+          from github import Github
+          
+          # Get GitHub token from environment
+          github_token = os.environ.get('GITHUB_TOKEN')
+          g = Github(github_token)
+          
+          # Load branch protection rules from configuration file
+          with open('docs/branch_protection.json', 'r') as f:
+              config = yaml.safe_load(f)
+          
+          # Get the repository
+          repo = g.get_repo('dndnordic/origin')
+          print(f"Configuring branch protection for {repo.full_name}")
+          
+          # Apply branch protection rules
+          for branch_name, rules in config.get('branches', {}).items():
+              branch = repo.get_branch(branch_name)
+              
+              # Configure branch protection
+              branch.edit_protection(
+                  required_approvals=rules.get('required_approvals', 1),
+                  dismiss_stale_reviews=rules.get('dismiss_stale_reviews', True),
+                  require_code_owner_reviews=rules.get('require_code_owner_reviews', True),
+                  enforce_admins=rules.get('enforce_admins', False),
+                  required_status_checks=rules.get('required_status_checks', []),
+                  strict=rules.get('strict', True)
+              )
+              print(f"  ✅ Applied protection rules to branch: {branch_name}")
+          
+          print("Branch protection rules synchronized successfully.")
+          EOF
+
+      - name: Sync Webhook Configurations
+        if: ${{ github.event.inputs.sync_webhooks != 'false' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Syncing webhook configurations..."
+          python - << 'EOF'
+          import os
+          import yaml
+          from github import Github
+          
+          # Get GitHub token from environment
+          github_token = os.environ.get('GITHUB_TOKEN')
+          g = Github(github_token)
+          
+          # Repository to configure
+          repo = g.get_repo('dndnordic/origin')
+          
+          # Webhook configuration
+          webhook_config = {
+              'url': 'https://origin-api.dndnordic.com/api/github/webhook',
+              'content_type': 'json',
+              'secret': os.environ.get('GITHUB_WEBHOOK_SECRET', ''),
+              'insecure_ssl': '0',
+              'events': ['push', 'pull_request', 'pull_request_review'],
+              'active': True
+          }
+          
+          # Get existing webhooks
+          existing_webhooks = list(repo.get_hooks())
+          
+          # Check if webhook already exists with the same URL
+          webhook_exists = False
+          for hook in existing_webhooks:
+              if hook.config.get('url') == webhook_config['url']:
+                  webhook_exists = True
+                  # Update the webhook configuration
+                  hook.edit(
+                      config=webhook_config,
+                      events=webhook_config['events'],
+                      active=webhook_config['active']
+                  )
+                  print(f"Updated existing webhook: {webhook_config['url']}")
+                  break
+          
+          # Create new webhook if it doesn't exist
+          if not webhook_exists:
+              repo.create_hook(
+                  name='web',
+                  config={
+                      'url': webhook_config['url'],
+                      'content_type': webhook_config['content_type'],
+                      'secret': webhook_config['secret'],
+                      'insecure_ssl': webhook_config['insecure_ssl']
+                  },
+                  events=webhook_config['events'],
+                  active=webhook_config['active']
+              )
+              print(f"Created new webhook: {webhook_config['url']}")
+          
+          print("Webhook configurations synchronized successfully.")
+          EOF
+        
+      - name: Sync Repository Labels
+        if: ${{ github.event.inputs.sync_labels != 'false' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Syncing repository labels..."
+          python - << 'EOF'
+          import os
+          from github import Github
+          
+          # Get GitHub token from environment
+          github_token = os.environ.get('GITHUB_TOKEN')
+          g = Github(github_token)
+          
+          # Repository to configure
+          repo = g.get_repo('dndnordic/origin')
+          
+          # Define standard labels
+          standard_labels = [
+              {"name": "governance", "color": "0366d6", "description": "Related to governance functions"},
+              {"name": "llm-analysis", "color": "fbca04", "description": "LLM analysis required"},
+              {"name": "approved", "color": "0e8a16", "description": "Approved by governance system"},
+              {"name": "needs_review", "color": "d93f0b", "description": "Needs human review"},
+              {"name": "rejected", "color": "b60205", "description": "Rejected by governance system"},
+              {"name": "security", "color": "d73a4a", "description": "Security-related changes"},
+              {"name": "documentation", "color": "0075ca", "description": "Documentation changes"},
+              {"name": "enhancement", "color": "a2eeef", "description": "New feature or enhancement"},
+              {"name": "bug", "color": "d73a4a", "description": "Something isn't working"},
+              {"name": "dependencies", "color": "0366d6", "description": "Dependency updates"},
+              {"name": "automated", "color": "cfd3d7", "description": "Automated changes"}
+          ]
+          
+          # Get existing labels
+          existing_labels = {label.name: label for label in repo.get_labels()}
+          
+          # Update or create labels
+          for label_info in standard_labels:
+              if label_info["name"] in existing_labels:
+                  # Update existing label
+                  label = existing_labels[label_info["name"]]
+                  label.edit(label_info["name"], label_info["color"], label_info["description"])
+                  print(f"Updated label: {label_info['name']}")
+              else:
+                  # Create new label
+                  repo.create_label(label_info["name"], label_info["color"], label_info["description"])
+                  print(f"Created label: {label_info['name']}")
+          
+          print("Repository labels synchronized successfully.")
+          EOF
+
+      - name: Sync Complete
+        run: |
+          echo "✅ GitHub repository settings synchronized successfully"

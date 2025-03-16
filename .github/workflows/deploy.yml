@@ -1,0 +1,111 @@
+name: Build and Deploy Origin System
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'vultr'
+        type: choice
+        options:
+          - vultr
+          - aws
+          - azure
+          - gcp
+
+jobs:
+  build-origin:
+    runs-on: [self-hosted, Linux, Docker, X64, builder]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Login to Vultr Container Registry
+      run: |
+        echo "${{ secrets.VULTR_REGISTRY_PASSWORD }}" | docker login registry.vultr.dndnordic.com -u ${{ secrets.VULTR_REGISTRY_USERNAME }} --password-stdin
+    
+    - name: Build and push Origin Docker image
+      run: |
+        docker build -t registry.vultr.dndnordic.com/origin:latest -t registry.vultr.dndnordic.com/origin:${{ github.sha }} .
+        docker push registry.vultr.dndnordic.com/origin:latest
+        docker push registry.vultr.dndnordic.com/origin:${{ github.sha }}
+  
+  build-origin-components:
+    runs-on: [self-hosted, Linux, Docker, X64, builder]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Login to Vultr Container Registry
+      run: |
+        echo "${{ secrets.VULTR_REGISTRY_PASSWORD }}" | docker login registry.vultr.dndnordic.com -u ${{ secrets.VULTR_REGISTRY_USERNAME }} --password-stdin
+    
+    - name: Build and push Origin Components
+      run: |
+        # Build and push LLM Service
+        docker build -t registry.vultr.dndnordic.com/origin-llm:latest -t registry.vultr.dndnordic.com/origin-llm:${{ github.sha }} ./llm-service
+        docker push registry.vultr.dndnordic.com/origin-llm:latest
+        docker push registry.vultr.dndnordic.com/origin-llm:${{ github.sha }}
+        
+        # Build and push Governance Service
+        docker build -t registry.vultr.dndnordic.com/origin-governance:latest -t registry.vultr.dndnordic.com/origin-governance:${{ github.sha }} ./governance
+        docker push registry.vultr.dndnordic.com/origin-governance:latest
+        docker push registry.vultr.dndnordic.com/origin-governance:${{ github.sha }}
+        
+        # Clean up
+        docker image prune -f
+    
+  deploy:
+    needs: [build-origin, build-origin-components]
+    runs-on: [self-hosted, Linux, Docker, X64, builder]
+    if: github.event_name != 'pull_request'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set Kubernetes Context
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBECONFIG }}
+        context: vultr-k8s
+    
+    - name: Create k8s-secrets.env
+      run: |
+        cat > k8s-secrets.env << EOF
+        GITHUB_TOKEN_BASE64=$(echo -n "${{ secrets.GITHUB_TOKEN }}" | base64 -w 0)
+        GITHUB_WEBHOOK_SECRET_BASE64=$(echo -n "${{ secrets.GITHUB_WEBHOOK_SECRET }}" | base64 -w 0)
+        MIKAEL_AUTH_TOKEN_BASE64=$(echo -n "${{ secrets.MIKAEL_AUTH_TOKEN }}" | base64 -w 0)
+        DND_GENESIS_GITHUB_TOKEN_BASE64=$(echo -n "${{ secrets.DND_GENESIS_GITHUB_TOKEN }}" | base64 -w 0)
+        GITHUB_RUNNER_TOKEN_BASE64=$(echo -n "${{ secrets.GITHUB_RUNNER_TOKEN }}" | base64 -w 0)
+        VULTR_REGISTRY_AUTH_BASE64=$(echo -n "${{ secrets.VULTR_REGISTRY_AUTH_BASE64 }}" | base64 -w 0)
+        VULTR_REGISTRY_CONFIG_BASE64=${{ secrets.VULTR_REGISTRY_CONFIG_BASE64 }}
+        EOF
+    
+    - name: Deploy to Kubernetes
+      run: |
+        # Export environment variables for secrets substitution
+        export $(cat k8s-secrets.env | xargs)
+        
+        # Apply namespace first
+        kubectl apply -f kubernetes/namespace.yaml
+        
+        # Apply secrets
+        envsubst < kubernetes/secrets.yaml | kubectl apply -f -
+        envsubst < kubernetes/registry-credentials.yaml | kubectl apply -f -
+        
+        # Deploy using kustomize
+        kubectl apply -k kubernetes/cloud-providers/${{ github.event.inputs.environment || 'vultr' }}
+        
+        # Verify deployment
+        kubectl rollout status deployment/origin -n governance-system --timeout=180s
+    
+    - name: Clean up secrets
+      if: always()
+      run: |
+        rm -f k8s-secrets.env

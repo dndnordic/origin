@@ -1,0 +1,376 @@
+{% extends "layout.html" %}
+
+{% block title %}Settings - Mikael's Governance System{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-cogs me-2"></i>Settings</h1>
+    </div>
+
+    <div class="row">
+        <div class="col-md-3">
+            <div class="list-group mb-4">
+                <a href="#security" class="list-group-item list-group-item-action active" data-bs-toggle="list">
+                    <i class="fas fa-shield-alt me-2"></i>Security
+                </a>
+                <a href="#yubikey" class="list-group-item list-group-item-action" data-bs-toggle="list">
+                    <i class="fas fa-key me-2"></i>YubiKey Management
+                </a>
+                <a href="#notifications" class="list-group-item list-group-item-action" data-bs-toggle="list">
+                    <i class="fas fa-bell me-2"></i>Notifications
+                </a>
+                <a href="#database" class="list-group-item list-group-item-action" data-bs-toggle="list">
+                    <i class="fas fa-database me-2"></i>Database Settings
+                </a>
+                <a href="#api" class="list-group-item list-group-item-action" data-bs-toggle="list">
+                    <i class="fas fa-plug me-2"></i>API Settings
+                </a>
+            </div>
+        </div>
+        <div class="col-md-9">
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="security">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Security Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <form>
+                                <div class="mb-3">
+                                    <label class="form-label">Session Timeout</label>
+                                    <select class="form-select">
+                                        <option value="86400">1 day</option>
+                                        <option value="604800">1 week</option>
+                                        <option value="1209600" selected>2 weeks</option>
+                                        <option value="2592000">30 days</option>
+                                    </select>
+                                    <div class="form-text">
+                                        How long until your login session expires
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">YubiKey Enforcement</label>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="yubikeyRequired" checked>
+                                        <label class="form-check-label" for="yubikeyRequired">
+                                            Require YubiKey for all governance actions
+                                        </label>
+                                    </div>
+                                    <div class="form-text">
+                                        When enabled, all proposal approvals and rejections require YubiKey verification
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Two-Factor Authentication</label>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="twoFactorEnabled" checked>
+                                        <label class="form-check-label" for="twoFactorEnabled">
+                                            Enable two-factor authentication
+                                        </label>
+                                    </div>
+                                    <div class="form-text">
+                                        When enabled, login requires both password and YubiKey verification
+                                    </div>
+                                </div>
+                                
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save me-1"></i>Save Settings
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="yubikey">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-key me-2"></i>YubiKey Management</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                YubiKey is required for secure governance operations. You should have at least one backup YubiKey configured.
+                            </div>
+                            
+                            <h6 class="mb-3">Registered YubiKeys</h6>
+                            <div class="table-responsive mb-4">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Type</th>
+                                            <th>Last Used</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Primary YubiKey</td>
+                                            <td>YubiKey 5 NFC</td>
+                                            <td>2025-03-16</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-danger">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>Backup YubiKey</td>
+                                            <td>YubiKey 5C</td>
+                                            <td>2025-01-15</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-danger">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <h6 class="mb-3">Register New YubiKey</h6>
+                            <form>
+                                <div class="mb-3">
+                                    <label for="yubikey_name" class="form-label">YubiKey Name</label>
+                                    <input type="text" class="form-control" id="yubikey_name" placeholder="e.g., Office YubiKey">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="yubikey_otp" class="form-label">YubiKey OTP</label>
+                                    <input type="text" class="form-control" id="yubikey_otp" placeholder="Touch your YubiKey...">
+                                    <div class="form-text">
+                                        Touch your YubiKey to generate a one-time password
+                                    </div>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-plus-circle me-1"></i>Register New YubiKey
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="notifications">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-bell me-2"></i>Notification Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <form>
+                                <div class="mb-3">
+                                    <label class="form-label">Email Notifications</label>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="emailEnabled" checked>
+                                        <label class="form-check-label" for="emailEnabled">
+                                            Enable email notifications
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">Email Address</label>
+                                    <input type="email" class="form-control" id="email" value="mikael@dndnordic.se">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">SMS Notifications</label>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="smsEnabled" checked>
+                                        <label class="form-check-label" for="smsEnabled">
+                                            Enable SMS notifications
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="phone" class="form-label">Phone Number</label>
+                                    <input type="tel" class="form-control" id="phone" value="+46733555444">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Notification Events</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="newProposal" checked>
+                                        <label class="form-check-label" for="newProposal">
+                                            New proposal submitted
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="highRiskProposal" checked>
+                                        <label class="form-check-label" for="highRiskProposal">
+                                            High-risk proposal submitted
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="securityIncident" checked>
+                                        <label class="form-check-label" for="securityIncident">
+                                            Security incident detected
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save me-1"></i>Save Notification Settings
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="database">
+                    <!-- Database Settings -->
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-database me-2"></i>Database Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Changing database settings may affect system stability. Proceed with caution.
+                            </div>
+                            
+                            <h6>ImmuDB Settings</h6>
+                            <form class="mb-4">
+                                <div class="mb-3">
+                                    <label for="immudb_host" class="form-label">ImmuDB Host</label>
+                                    <input type="text" class="form-control" id="immudb_host" value="immudb">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="immudb_port" class="form-label">ImmuDB Port</label>
+                                    <input type="text" class="form-control" id="immudb_port" value="3322">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="immudb_user" class="form-label">ImmuDB User</label>
+                                    <input type="text" class="form-control" id="immudb_user" value="immudb">
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-1"></i>Save ImmuDB Settings
+                                </button>
+                            </form>
+                            
+                            <h6>Event Store Settings</h6>
+                            <form class="mb-4">
+                                <div class="mb-3">
+                                    <label for="eventstore_url" class="form-label">Event Store URL</label>
+                                    <input type="text" class="form-control" id="eventstore_url" value="tcp://eventstore:1113">
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-1"></i>Save Event Store Settings
+                                </button>
+                            </form>
+                            
+                            <h6>Database Verification</h6>
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-outline-primary">
+                                    <i class="fas fa-check-circle me-1"></i>Verify Database Consistency
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="api">
+                    <!-- API Settings -->
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="fas fa-plug me-2"></i>API Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <h6>API Configuration</h6>
+                            <form class="mb-4">
+                                <div class="mb-3">
+                                    <label for="api_port" class="form-label">API Port</label>
+                                    <input type="text" class="form-control" id="api_port" value="8000">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">API Access Control</label>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="restrictApi" checked>
+                                        <label class="form-check-label" for="restrictApi">
+                                            Restrict API access to authorized clients
+                                        </label>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-1"></i>Save API Settings
+                                </button>
+                            </form>
+                            
+                            <h6>API Keys</h6>
+                            <div class="table-responsive mb-4">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Client</th>
+                                            <th>Status</th>
+                                            <th>Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Singularity System</td>
+                                            <td><span class="badge bg-success">Active</span></td>
+                                            <td>2025-02-01</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-secondary">
+                                                    <i class="fas fa-key"></i> Rotate
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger">
+                                                    <i class="fas fa-ban"></i> Revoke
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <h6>Create New API Key</h6>
+                            <form>
+                                <div class="mb-3">
+                                    <label for="client_name" class="form-label">Client Name</label>
+                                    <input type="text" class="form-control" id="client_name">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Permissions</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="perm_read" checked>
+                                        <label class="form-check-label" for="perm_read">
+                                            Read proposals
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="perm_submit" checked>
+                                        <label class="form-check-label" for="perm_submit">
+                                            Submit proposals
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="perm_decide">
+                                        <label class="form-check-label" for="perm_decide">
+                                            Approve/reject proposals (requires YubiKey)
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-plus-circle me-1"></i>Create API Key
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

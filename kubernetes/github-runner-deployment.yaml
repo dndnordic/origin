@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-runner
+  namespace: governance-system
+  labels:
+    app: github-runner
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: github-runner
+  template:
+    metadata:
+      labels:
+        app: github-runner
+    spec:
+      containers:
+      - name: github-runner
+        image: registry.vultr.dndnordic.com/github-actions-runner:latest
+        env:
+        - name: RUNNER_NAME_PREFIX
+          value: "origin-vultr-runner"
+        - name: RUNNER_WORKDIR
+          value: "/home/runner/work"
+        - name: RUNNER_SCOPE
+          value: "repo"
+        - name: REPO_URL
+          value: "https://github.com/dndnordic/origin"
+        - name: ACCESS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: github-token
+        - name: LABELS
+          value: "self-hosted,Linux,Docker,X64,builder"
+        - name: RUNNER_GROUP
+          value: "default"
+        - name: DISABLE_AUTO_UPDATE
+          value: "true"
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+        volumeMounts:
+        - name: runner-data
+          mountPath: /home/runner
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+        - name: registry-config
+          mountPath: /home/runner/.docker/config.json
+          subPath: config.json
+      volumes:
+      - name: runner-data
+        emptyDir: {}
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+      - name: registry-config
+        configMap:
+          name: docker-registry-config
+          items:
+          - key: config.json
+            path: config.json

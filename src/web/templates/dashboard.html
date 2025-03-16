@@ -1,0 +1,261 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard - Mikael's Governance System{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-tachometer-alt me-2"></i>Governance Dashboard</h1>
+        <div>
+            <a href="{{ url_for('proposals') }}" class="btn btn-primary">
+                <i class="fas fa-clipboard-list me-1"></i>View All Proposals
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Pending Proposals</h5>
+                            <h2 class="display-4" id="pending-count">{{ pending_proposals|length }}</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-clock fa-3x"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-primary border-light">
+                    <a href="{{ url_for('proposals') }}" class="text-white text-decoration-none">
+                        <small>View Pending <i class="fas fa-arrow-right ms-1"></i></small>
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Approved Proposals</h5>
+                            <h2 class="display-4" id="approved-count">0</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-check-circle fa-3x"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-success border-light">
+                    <a href="{{ url_for('proposals') }}" class="text-white text-decoration-none">
+                        <small>View Approved <i class="fas fa-arrow-right ms-1"></i></small>
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-danger text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Rejected Proposals</h5>
+                            <h2 class="display-4" id="rejected-count">0</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-times-circle fa-3x"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-danger border-light">
+                    <a href="{{ url_for('proposals') }}" class="text-white text-decoration-none">
+                        <small>View Rejected <i class="fas fa-arrow-right ms-1"></i></small>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Pending Proposals -->
+        <div class="col-md-6">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Pending Proposals</h5>
+                </div>
+                <div class="card-body">
+                    {% if pending_proposals %}
+                    <div class="list-group">
+                        {% for proposal in pending_proposals %}
+                        <a href="{{ url_for('view_proposal', proposal_id=proposal.proposal_id) }}" class="list-group-item list-group-item-action">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">{{ proposal.title }}</h5>
+                                <small>{{ proposal.submission_time }}</small>
+                            </div>
+                            <p class="mb-1">{{ proposal.description|truncate(100) }}</p>
+                            <small>Submitted by: {{ proposal.submitter }}</small>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No pending proposals at this time.
+                    </div>
+                    {% endif %}
+                </div>
+                {% if pending_proposals %}
+                <div class="card-footer bg-light">
+                    <a href="{{ url_for('proposals') }}" class="btn btn-sm btn-outline-primary">
+                        View All Pending Proposals
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="col-md-6">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Recent Activity</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="activity-chart" width="400" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Decisions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>Recent Decisions</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_decisions %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Title</th>
+                                    <th>Submitter</th>
+                                    <th>Status</th>
+                                    <th>Decision Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for decision in recent_decisions %}
+                                <tr>
+                                    <td>{{ decision.proposal_id }}</td>
+                                    <td>{{ decision.title }}</td>
+                                    <td>{{ decision.submitter }}</td>
+                                    <td>
+                                        {% if decision.status == 'approved' %}
+                                        <span class="badge bg-success">Approved</span>
+                                        {% elif decision.status == 'rejected' %}
+                                        <span class="badge bg-danger">Rejected</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if decision.status == 'approved' %}
+                                        {{ decision.approval_time }}
+                                        {% elif decision.status == 'rejected' %}
+                                        {{ decision.rejection_time }}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('view_proposal', proposal_id=decision.proposal_id) }}" class="btn btn-sm btn-outline-primary">
+                                            View
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No recent decisions to display.
+                    </div>
+                    {% endif %}
+                </div>
+                {% if recent_decisions %}
+                <div class="card-footer bg-light">
+                    <a href="{{ url_for('proposals') }}" class="btn btn-sm btn-outline-primary">
+                        View All Decisions
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Fetch dashboard stats
+        fetch('{{ url_for("api_stats") }}')
+            .then(response => response.json())
+            .then(data => {
+                // Update counts
+                document.getElementById('pending-count').innerText = data.pending_count;
+                document.getElementById('approved-count').innerText = data.approved_count;
+                document.getElementById('rejected-count').innerText = data.rejected_count;
+                
+                // Create activity chart
+                const ctx = document.getElementById('activity-chart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.recent_activity.map(item => item.date),
+                        datasets: [
+                            {
+                                label: 'Proposals',
+                                data: data.recent_activity.map(item => item.proposals),
+                                backgroundColor: 'rgba(13, 110, 253, 0.5)',
+                                borderColor: 'rgba(13, 110, 253, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: 'Approved',
+                                data: data.recent_activity.map(item => item.approved),
+                                backgroundColor: 'rgba(25, 135, 84, 0.5)',
+                                borderColor: 'rgba(25, 135, 84, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: 'Rejected',
+                                data: data.recent_activity.map(item => item.rejected),
+                                backgroundColor: 'rgba(220, 53, 69, 0.5)',
+                                borderColor: 'rgba(220, 53, 69, 1)',
+                                borderWidth: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                precision: 0
+                            }
+                        }
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching dashboard stats:', error);
+            });
+    });
+</script>
+{% endblock %}

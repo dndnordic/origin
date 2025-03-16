@@ -1,0 +1,67 @@
+{% extends "layout.html" %}
+
+{% block title %}Login - Mikael's Governance System{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-sign-in-alt me-2"></i>Login
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('login') }}">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-user"></i></span>
+                                <input type="text" class="form-control" id="username" name="username" required>
+                            </div>
+                            <div class="form-text">Enter your username (e.g., mhugo)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="yubikey_otp" class="form-label">YubiKey OTP</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-key"></i></span>
+                                <input type="text" class="form-control" id="yubikey_otp" name="yubikey_otp">
+                            </div>
+                            <div class="form-text">Touch your YubiKey to generate a one-time password</div>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-sign-in-alt me-2"></i>Login
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-footer">
+                    <div class="alert alert-info mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Security Note:</strong> Mikael must use YubiKey authentication to access the governance system.
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Demo login info (remove in production) -->
+            <div class="card mt-4 shadow-sm">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Demo Login Information</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Username:</strong> mhugo</p>
+                    <p><strong>YubiKey OTP:</strong> Any value (for demo only)</p>
+                    <div class="alert alert-warning mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        In a production environment, actual YubiKey validation would be required.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

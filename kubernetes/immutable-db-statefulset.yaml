@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: immutable-db
+  namespace: governance-system
+  labels:
+    app: immutable-db
+    component: database
+    tier: persistence
+spec:
+  serviceName: "immutable-db"
+  # Prepare for HA - will be set to 1 initially, but ready to scale up
+  replicas: 1
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: immutable-db
+  template:
+    metadata:
+      labels:
+        app: immutable-db
+        component: database
+        tier: persistence
+    spec:
+      # Prepare for multiple databases across different nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - immutable-db
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: immudb
+        image: codenotary/immudb:latest
+        args:
+        - "--dir=/data"
+        - "--address=0.0.0.0"
+        # HA configuration placeholder - ready for cluster settings
+        # "--replication-enabled=true" in future
+        # "--replication-follower-username=replicator" in future
+        # "--replication-follower-password=$(REPLICATION_PASSWORD)" in future
+        ports:
+        - containerPort: 3322
+          name: immudb
+        - containerPort: 8080
+          name: immudb-metrics
+        env:
+        - name: IMMUDB_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: immudb-admin-password
+              optional: true
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: immutable-data
+          mountPath: /data
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          tcpSocket:
+            port: 3322
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          tcpSocket:
+            port: 3322
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      # Ensure we try to reschedule quickly if a node fails
+      terminationGracePeriodSeconds: 10
+  volumeClaimTemplates:
+  - metadata:
+      name: immutable-data
+    spec:
+      # Prepare for future distributed storage support
+      # Will use ReadWriteOnce initially but prepared for change
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "standard"
+      resources:
+        requests:
+          storage: 10Gi
