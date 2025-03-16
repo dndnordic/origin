@@ -17,6 +17,18 @@ This directory contains Kubernetes manifests for deploying the Origin governance
 2. Access to the dndnordic container registry
 3. Properly configured secrets (see below)
 
+### Special Notes on Mikael's GPU Connector
+
+The repository includes a special connector for utilizing Mikael's NVIDIA GeForce RTX 4080 GPU for LLM operations through WSL. For detailed setup instructions, see [mikael_wsl_gpu_setup.md](../docs/mikael_wsl_gpu_setup.md).
+
+To deploy the connector to Kubernetes, use:
+
+```bash
+./scripts/deploy-mikael-connector.sh --host <mikael-hostname-or-ip>
+```
+
+This allows the Origin system to offload intensive LLM inference tasks to Mikael's GPU without requiring cloud GPU resources.
+
 ### Setting up Secrets
 
 Before deploying, you need to create a `secrets.env` file with the following variables:
@@ -200,16 +212,24 @@ docker pull registry.vultr.dndnordic.com/origin:latest
    - Run `kubectl logs deployment/mikael-wsl-connector` to check Tailscale connection status
    - Ensure Mikael's Tailscale node is online in the Tailscale admin console
 
-2. **GitHub Runner Registration Failures**:
+2. **Mikael's GPU Connector Issues**:
+   - Verify Mikael's WSL environment is set up correctly: `wsl nvidia-smi`
+   - Check that PyTorch with CUDA is installed and working: `wsl ~/activate-origin-llm.sh && python -c "import torch; print(torch.cuda.is_available())"`
+   - Ensure the connector service is running: `wsl ps -ef | grep origin-wsl`
+   - Check the connector logs: `wsl cat ~/connector-test.log`
+   - Verify the Kubernetes connector is deployed correctly: `kubectl get deployment mikael-llm-connector -n origin-system`
+   - Check Kubernetes connector logs: `kubectl logs deployment/mikael-llm-connector -n origin-system`
+
+3. **GitHub Runner Registration Failures**:
    - Check that the GITHUB_RUNNER_TOKEN is valid and not expired
    - Verify the runner has appropriate permissions for the repository
    - Use GitHub settings to check registered runners: `https://github.com/dndnordic/origin/settings/actions/runners`
 
-3. **ImmuDB Connection Issues**:
+4. **ImmuDB Connection Issues**:
    - Check if the StatefulSet is running correctly
    - Verify the persistent volume is correctly bound
    
-4. **GitHub Secrets/Variables Issues**:
+5. **GitHub Secrets/Variables Issues**:
    - Check repository settings at `https://github.com/dndnordic/origin/settings/secrets/actions`
    - Verify all required secrets are set correctly (GITHUB_TOKEN, TAILSCALE_AUTH_KEY, etc.)
    - Some values may need to be set as repository Variables instead of Secrets
@@ -220,3 +240,4 @@ For issues with:
 - **Kubernetes Deployment**: Contact the DevOps team
 - **Origin Application**: Contact the Governance team
 - **WSL Connection**: Contact Mikael directly
+- **GPU/ML Inference**: Contact the ML Engineering team or Mikael for GPU-specific issues
