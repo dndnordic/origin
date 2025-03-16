@@ -1,0 +1,33 @@
+name: Mikael WSL Final Check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-wsl:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: WSL Environment Check
+      shell: cmd
+      run: |
+        echo "== WSL Environment =="
+        wsl uname -a
+        wsl nvidia-smi
+        
+    - name: Python Configuration
+      shell: cmd
+      run: |
+        echo "== Python Setup =="
+        wsl python --version
+        wsl python3 --version
+        wsl ls -la /usr/local/bin/python
+        
+    - name: PyTorch Virtual Environment
+      shell: cmd
+      run: |
+        echo "== PyTorch Environment =="
+        wsl ls -la ~/origin-llm || echo "Directory not found"
+        wsl bash -c "if [ -f ~/activate-origin-llm.sh ]; then . ~/activate-origin-llm.sh && python -c 'import torch; print(\"CUDA available:\", torch.cuda.is_available())'; else echo 'Activation script not found'; fi"
