@@ -4,7 +4,7 @@ This document provides instructions for setting up Mikael's Windows machine with
 
 ## Overview
 
-The setup allows the Origin system to use Mikael's NVIDIA GeForce RTX 4080 GPU for LLM inference operations through a connector service running in WSL, which is accessed by a Kubernetes deployment in the Origin system.
+The setup allows the Origin system to use Mikael's NVIDIA GeForce RTX 4080 GPU for LLM inference operations through a connector service running in WSL, which is accessed by a Kubernetes deployment in the Origin system. This connection is established through our secured Headscale network.
 
 ## Prerequisites
 

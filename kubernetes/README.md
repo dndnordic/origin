@@ -51,12 +51,12 @@ GITHUB_RUNNER_TOKEN=github_runner_registration_token  # For registering self-hos
 VULTR_REGISTRY_AUTH_BASE64=base64_encoded_auth_string # For accessing Vultr container registry
 VULTR_REGISTRY_CONFIG_BASE64=base64_encoded_config    # Base64 encoded docker config.json
 
-# Tailscale authentication for secure networking
-# Generate from Tailscale admin console: https://login.tailscale.com/admin/settings/keys
-TAILSCALE_AUTH_KEY=tskey-auth-randomstring            # Used to connect to the Tailscale network
+# Headscale authentication for secure networking
+# Generate from Headscale admin console
+HEADSCALE_AUTH_KEY=hskey-auth-randomstring            # Used to connect to the Headscale network
 
-# Mikael's WSL connection details (accessed via Tailscale)
-MIKAEL_WSL_HOST=hostname.tailnet.ts.net               # Tailscale hostname for Mikael's machine
+# Mikael's WSL connection details (accessed via Headscale)
+MIKAEL_WSL_HOST=hostname.headnet.internal             # Headscale hostname for Mikael's machine
 MIKAEL_WSL_PORT=ssh_port                              # Usually 22 but may be custom
 MIKAEL_WSL_USER=ssh_username                          # Usually 'mikael'
 MIKAEL_SSH_KEY="-----BEGIN OPENSSH PRIVATE KEY-----
@@ -101,7 +101,7 @@ if [ -n "${GITHUB_ACTIONS}" ]; then
   MIKAEL_AUTH_TOKEN_BASE64=$(echo -n "$MIKAEL_AUTH_TOKEN" | base64 -w 0)
   DND_GENESIS_GITHUB_TOKEN_BASE64=$(echo -n "$DND_GENESIS_GITHUB_TOKEN" | base64 -w 0)
   GITHUB_RUNNER_TOKEN_BASE64=$(echo -n "$GITHUB_RUNNER_TOKEN" | base64 -w 0)
-  TAILSCALE_AUTH_KEY_BASE64=$(echo -n "$TAILSCALE_AUTH_KEY" | base64 -w 0)
+  HEADSCALE_AUTH_KEY_BASE64=$(echo -n "$HEADSCALE_AUTH_KEY" | base64 -w 0)
   MIKAEL_WSL_HOST_BASE64=$(echo -n "$MIKAEL_WSL_HOST" | base64 -w 0)
   MIKAEL_WSL_PORT_BASE64=$(echo -n "$MIKAEL_WSL_PORT" | base64 -w 0)
   MIKAEL_WSL_USER_BASE64=$(echo -n "$MIKAEL_WSL_USER" | base64 -w 0)
@@ -207,10 +207,10 @@ docker pull registry.vultr.dndnordic.com/origin:latest
 
 1. **WSL Connection Failures**:
    - Verify SSH key is correct in the secrets
-   - Check that Mikael's WSL environment is running the Tailscale client
-   - Verify Tailscale auth key is valid and has the correct permissions
-   - Run `kubectl logs deployment/mikael-wsl-connector` to check Tailscale connection status
-   - Ensure Mikael's Tailscale node is online in the Tailscale admin console
+   - Check that Mikael's WSL environment is running the Headscale client
+   - Verify Headscale auth key is valid and has the correct permissions
+   - Run `kubectl logs deployment/mikael-wsl-connector` to check Headscale connection status
+   - Ensure Mikael's Headscale node is online in the Headscale admin console
 
 2. **Mikael's GPU Connector Issues**:
    - Verify Mikael's WSL environment is set up correctly: `wsl nvidia-smi`
@@ -231,7 +231,7 @@ docker pull registry.vultr.dndnordic.com/origin:latest
    
 5. **GitHub Secrets/Variables Issues**:
    - Check repository settings at `https://github.com/dndnordic/origin/settings/secrets/actions`
-   - Verify all required secrets are set correctly (GITHUB_TOKEN, TAILSCALE_AUTH_KEY, etc.)
+   - Verify all required secrets are set correctly (GITHUB_TOKEN, HEADSCALE_AUTH_KEY, etc.)
    - Some values may need to be set as repository Variables instead of Secrets
 
 ### Support Contacts
