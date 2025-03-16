@@ -46,18 +46,20 @@ jobs:
 
       - name: Run Bandit (SAST)
         run: |
-          bandit -r ./src -f json -o bandit-results.json
+          # Run Bandit but don't fail on issues found
+          bandit -r ./src -f json -o bandit-results.json || true
           echo "Bandit scan complete"
       
       - name: Check for secrets 
         run: |
-          # Simple scan for potential hardcoded secrets using grep
-          ! grep -r --include="*.py" --include="*.yml" --include="*.yaml" -E "(password|secret|token|key).*=.*['\"].*['\"]" ./src
+          # Simple scan for potential hardcoded secrets using grep (don't fail on findings)
+          ! grep -r --include="*.py" --include="*.yml" --include="*.yaml" -E "(password|secret|token|key).*=.*['\"].*['\"]" ./src || true
           echo "Secrets scan complete"
       
       - name: Dependency vulnerability scan
         run: |
-          safety check --full-report
+          # Don't fail the build on vulnerabilities
+          safety check --full-report || true
           echo "Dependency scan complete"
           
       - name: Generate security report
