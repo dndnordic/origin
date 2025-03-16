@@ -1,0 +1,106 @@
+name: Mikael WSL Connector Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-connector:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Create Simple Connector Script
+      shell: cmd
+      run: |
+        echo "Creating simple connector script..."
+        wsl bash -c "cat > ~/simple-connector.py << 'EOF'
+        #!/usr/bin/env python3
+        import os
+        import sys
+        import socket
+        import json
+        import torch
+        import threading
+        import time
+        
+        def start_server(host='0.0.0.0', port=8000):
+            print(f\"Starting server on {host}:{port}\")
+            print(f\"CUDA available: {torch.cuda.is_available()}\")
+            if torch.cuda.is_available():
+                print(f\"GPU: {torch.cuda.get_device_name(0)}\")
+            
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind((host, port))
+            sock.listen(5)
+            print(\"Server started, waiting for connections...\")
+            
+            # Run server for 30 seconds then exit
+            start_time = time.time()
+            while time.time() - start_time < 30:
+                try:
+                    client, addr = sock.accept()
+                    print(f\"Connection from {addr}\")
+                    t = threading.Thread(target=handle_client, args=(client, addr))
+                    t.daemon = True
+                    t.start()
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    print(f\"Error: {e}\")
+            
+            print(\"Server shutting down after 30 seconds\")
+            sock.close()
+            
+        def handle_client(client, addr):
+            try:
+                # Send basic system info
+                info = {
+                    \"hostname\": socket.gethostname(),
+                    \"cuda_available\": str(torch.cuda.is_available()),
+                    \"python_version\": sys.version,
+                    \"torch_version\": torch.__version__
+                }
+                client.sendall(json.dumps(info).encode('utf-8'))
+                
+                # Echo back any received data
+                data = client.recv(1024)
+                if data:
+                    print(f\"Received: {data.decode()}\")
+                    client.sendall(data)
+            except Exception as e:
+                print(f\"Error handling client {addr}: {e}\")
+            finally:
+                client.close()
+                
+        if __name__ == \"__main__\":
+            start_server()
+        EOF"
+        wsl chmod +x ~/simple-connector.py
+        
+    - name: Run Connector in Background
+      shell: cmd
+      run: |
+        echo "Starting connector in background..."
+        wsl bash -c "cd ~/origin-llm && . venv/bin/activate && nohup python ~/simple-connector.py > ~/connector.log 2>&1 & echo $! > ~/connector.pid"
+        wsl bash -c "sleep 2 && cat ~/connector.log"
+        
+    - name: Test Connection
+      shell: cmd
+      run: |
+        echo "Testing connection to connector..."
+        wsl bash -c "echo '{\"test\":\"message\"}' | nc localhost 8000"
+        
+    - name: Show Connector Logs
+      shell: cmd
+      run: |
+        echo "Connector logs:"
+        wsl bash -c "cat ~/connector.log"
+        
+    - name: Cleanup Connector
+      shell: cmd
+      if: always()
+      run: |
+        echo "Cleaning up connector process..."
+        wsl bash -c "if [ -f ~/connector.pid ]; then kill -15 $(cat ~/connector.pid) || true; rm ~/connector.pid; fi"
