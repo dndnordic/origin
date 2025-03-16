@@ -1,0 +1,31 @@
+name: Mikael WSL GPU Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-wsl-gpu:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Test WSL Environment
+      shell: cmd
+      run: |
+        echo Testing WSL environment...
+        wsl uname -a
+        wsl whoami
+        
+    - name: Test NVIDIA GPU
+      shell: cmd
+      run: |
+        echo Testing NVIDIA GPU...
+        wsl nvidia-smi
+        
+    - name: Write and Run Python Script
+      shell: cmd
+      run: |
+        echo Creating and running Python test script...
+        wsl bash -c "echo 'import os, sys, platform; print(f\"Python version: {sys.version}\"); print(f\"GPU: {os.popen(\"nvidia-smi\").read()}\")' > /tmp/test.py"
+        wsl bash -c "python3 /tmp/test.py || python /tmp/test.py"
