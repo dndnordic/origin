@@ -1,0 +1,17 @@
+name: Mikael WSL GPU Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  basic-test:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - name: Check Environment
+      shell: pwsh
+      run: |
+        echo "Running on: $env:COMPUTERNAME"
+        wsl bash -c "uname -a"
+        wsl bash -c "python3 --version"
+        wsl bash -c "python3 -c 'import sys; print(sys.path)'"
