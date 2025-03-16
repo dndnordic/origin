@@ -1,0 +1,94 @@
+name: Setup WSL Connector for Mikael (Simplified)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-connector:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Dependencies
+      shell: cmd
+      timeout-minutes: 10
+      run: |
+        echo Installing dependencies...
+        wsl bash -c "cd ~/origin-llm && source venv/bin/activate && pip install transformers accelerate huggingface_hub"
+        wsl bash -c "cd ~/origin-llm && source venv/bin/activate && pip install fastapi uvicorn pydantic"
+        
+    - name: Create Simple Connector Service
+      shell: cmd
+      run: |
+        echo Creating simplified connector service...
+        wsl bash -c "echo '#!/usr/bin/env python3' > ~/origin-wsl-simple.py"
+        wsl bash -c "echo '\"\"\"Minimal WSL GPU Connector Service for Origin System\"\"\"' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo 'import os' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo 'import sys' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo 'import socket' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo 'import json' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo 'import threading' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo 'import torch' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '# Basic socket server on port 8000' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo 'def start_server():' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    host = \"0.0.0.0\"' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    port = 8000' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    s.bind((host, port))' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    s.listen(5)' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    print(f\"Server started on {host}:{port}\")' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    # GPU info' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    gpu_info = {' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        \"hostname\": socket.gethostname(),' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        \"cuda_available\": str(torch.cuda.is_available()),' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        \"cuda_version\": torch.version.cuda if torch.cuda.is_available() else \"none\",' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        \"gpu_count\": torch.cuda.device_count() if torch.cuda.is_available() else 0,' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        \"gpu_name\": torch.cuda.get_device_name(0) if torch.cuda.is_available() and torch.cuda.device_count() > 0 else \"none\"' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    }' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    print(f\"GPU Info: {gpu_info}\")' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    while True:' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        try:' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '            conn, addr = s.accept()' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '            print(f\"Connection from {addr}\")' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '            # Handle each client in a new thread' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '            t = threading.Thread(target=handle_client, args=(conn, addr, gpu_info))' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '            t.daemon = True' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '            t.start()' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        except KeyboardInterrupt:' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '            break' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        except Exception as e:' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '            print(f\"Error: {e}\")' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    s.close()' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo 'def handle_client(conn, addr, gpu_info):' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    try:' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        # Send GPU info' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        conn.sendall(json.dumps(gpu_info).encode())' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        # Echo back any received data' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        data = conn.recv(1024)' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        if data:' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '            print(f\"Received: {data.decode()}\")' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '            conn.sendall(data)' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    except Exception as e:' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        print(f\"Client error: {e}\")' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    finally:' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '        conn.close()' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo 'if __name__ == \"__main__\":' >> ~/origin-wsl-simple.py"
+        wsl bash -c "echo '    start_server()' >> ~/origin-wsl-simple.py"
+        wsl bash -c "chmod +x ~/origin-wsl-simple.py"
+        
+    - name: Test Connector (10 seconds)
+      shell: cmd
+      run: |
+        echo Testing connector service (will run for 10 seconds)...
+        wsl bash -c "cd ~/origin-llm && source venv/bin/activate && nohup python ~/origin-wsl-simple.py > ~/connector-test.log 2>&1 & echo $! > ~/connector.pid && sleep 10 && kill -15 $(cat ~/connector.pid) || true"
+        wsl bash -c "cat ~/connector-test.log"

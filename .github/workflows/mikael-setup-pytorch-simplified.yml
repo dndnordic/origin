@@ -1,0 +1,51 @@
+name: Setup PyTorch for Mikael (Simplified)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-pytorch:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Create PyTorch Environment
+      shell: cmd
+      run: |
+        echo Creating PyTorch environment...
+        wsl bash -c "mkdir -p ~/origin-llm"
+        wsl bash -c "cd ~/origin-llm && python3 -m venv venv"
+        
+    - name: Upgrade pip
+      shell: cmd
+      run: |
+        echo Upgrading pip...
+        wsl bash -c "cd ~/origin-llm && source venv/bin/activate && pip install -U pip setuptools wheel"
+        
+    - name: Install PyTorch with CUDA Support
+      shell: cmd
+      timeout-minutes: 15
+      run: |
+        echo Installing PyTorch with CUDA support...
+        wsl bash -c "cd ~/origin-llm && source venv/bin/activate && pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121"
+        
+    - name: Test PyTorch Installation
+      shell: cmd
+      run: |
+        echo Testing PyTorch installation...
+        wsl bash -c "cd ~/origin-llm && source venv/bin/activate && python -c 'import torch; print(\"PyTorch version:\", torch.__version__); print(\"CUDA available:\", torch.cuda.is_available()); print(\"CUDA version:\", torch.version.cuda); print(\"Device count:\", torch.cuda.device_count()); print(\"Device name:\", torch.cuda.get_device_name(0) if torch.cuda.is_available() and torch.cuda.device_count() > 0 else \"none\")'"
+        
+    - name: Create Activation Script
+      shell: cmd
+      run: |
+        echo Creating activation script...
+        wsl bash -c "echo '#!/bin/bash' > ~/activate-origin-llm.sh"
+        wsl bash -c "echo '# Activate Origin LLM environment' >> ~/activate-origin-llm.sh"
+        wsl bash -c "echo 'cd ~/origin-llm' >> ~/activate-origin-llm.sh"
+        wsl bash -c "echo 'source venv/bin/activate' >> ~/activate-origin-llm.sh"
+        wsl bash -c "echo 'export PYTHONPATH=\$PWD' >> ~/activate-origin-llm.sh"
+        wsl bash -c "echo 'echo \"Origin LLM environment activated!\"' >> ~/activate-origin-llm.sh"
+        wsl bash -c "echo 'echo \"CUDA available: \$(python -c \"import torch; print(torch.cuda.is_available())\" 2>/dev/null || echo \"torch not installed\")\"' >> ~/activate-origin-llm.sh" 
+        wsl bash -c "echo 'echo \"To test GPU: python -c \\\"import torch; print(torch.cuda.get_device_name(0))\\\"\"' >> ~/activate-origin-llm.sh"
+        wsl bash -c "chmod +x ~/activate-origin-llm.sh"
