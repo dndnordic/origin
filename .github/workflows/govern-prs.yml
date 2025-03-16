@@ -25,15 +25,24 @@ jobs:
         with:
           fetch-depth: 0  # Full git history
       
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      
-      - name: Install dependencies
+      - name: Set up Python and dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          # Install Python 3.10 if not already installed
+          if ! command -v python3.10 &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y software-properties-common
+            sudo add-apt-repository -y ppa:deadsnakes/ppa
+            sudo apt-get update
+            sudo apt-get install -y python3.10 python3.10-venv python3.10-dev python3-pip
+          fi
+          
+          # Create symlinks if needed
+          sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 || true
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 || true
+          
+          # Install pip packages
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements.txt
       
       - name: Get PR Information
         id: pr_info
