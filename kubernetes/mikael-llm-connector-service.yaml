@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mikael-llm-connector
+  namespace: origin-system
+  labels:
+    app: mikael-llm-connector
+    component: gpu-inference
+spec:
+  selector:
+    app: mikael-llm-connector
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  type: ClusterIP

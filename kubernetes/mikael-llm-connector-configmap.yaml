@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mikael-wsl-connector-config
+  namespace: origin-system
+data:
+  wsl_host: "mikael-desktop.local"  # This should be replaced with Mikael's actual hostname or IP
+  wsl_port: "8000"
+  description: "Mikael's WSL GPU connector for LLM inference"
+  gpu_type: "NVIDIA GeForce RTX 4080"

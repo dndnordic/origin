@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mikael-llm-connector
+  namespace: origin-system
+  labels:
+    app: mikael-llm-connector
+    component: gpu-inference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mikael-llm-connector
+  template:
+    metadata:
+      labels:
+        app: mikael-llm-connector
+    spec:
+      containers:
+      - name: llm-connector
+        image: vultrorigin/origin-llm-connector:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        env:
+        - name: WSL_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: mikael-wsl-connector-config
+              key: wsl_host
+        - name: WSL_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: mikael-wsl-connector-config
+              key: wsl_port
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      imagePullSecrets:
+      - name: vultr-registry-credentials
