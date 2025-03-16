@@ -1,0 +1,81 @@
+name: Mikael WSL Python Setup (Fixed)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-python:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Check Current Python
+      shell: cmd
+      run: |
+        echo "Checking current Python installations..."
+        wsl which python || echo "python command not found"
+        wsl which python3 || echo "python3 command not found"
+        wsl python3 --version || echo "python3 version command failed"
+        
+    - name: Create Python Symlink
+      shell: cmd
+      run: |
+        echo "Creating Python symlink..."
+        wsl sudo ln -sf /usr/bin/python3 /usr/local/bin/python || echo "Failed to create symlink"
+        wsl ls -la /usr/local/bin/python || echo "Symlink verification failed"
+        wsl python --version || echo "python version command failed"
+        
+    - name: Install Python Development Tools
+      shell: cmd
+      run: |
+        echo "Installing Python development tools..."
+        wsl sudo apt-get update
+        wsl sudo apt-get install -y python3-dev python3-pip python3-venv
+        
+    - name: Verify Python Setup
+      shell: cmd
+      run: |
+        echo "Verifying Python setup..."
+        wsl python --version
+        wsl python3 --version
+        wsl pip --version || echo "pip command failed"
+        wsl pip3 --version || echo "pip3 command failed"
+        
+    - name: Setup Virtual Environment
+      shell: cmd
+      run: |
+        echo "Setting up Python virtual environment..."
+        wsl mkdir -p ~/origin-llm || echo "mkdir failed"
+        wsl python -m venv ~/origin-llm/venv || echo "venv creation failed"
+        wsl bash -c "cd ~/origin-llm && . venv/bin/activate && python --version" || echo "venv activation failed"
+        
+    - name: Install Basic Requirements
+      shell: cmd
+      run: |
+        echo "Installing basic Python requirements..."
+        wsl bash -c "cd ~/origin-llm && . venv/bin/activate && pip install -U pip setuptools wheel" || echo "pip upgrade failed"
+        wsl bash -c "cd ~/origin-llm && . venv/bin/activate && pip install torch --index-url https://download.pytorch.org/whl/cu121" || echo "torch installation failed"
+        
+    - name: Verify PyTorch CUDA
+      shell: cmd
+      run: |
+        echo "Verifying PyTorch CUDA support..."
+        wsl bash -c "cd ~/origin-llm && . venv/bin/activate && python -c \"import torch; print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda if torch.cuda.is_available() else 'N/A'); print('GPU count:', torch.cuda.device_count() if torch.cuda.is_available() else 0); print('GPU name:', torch.cuda.get_device_name(0) if torch.cuda.is_available() and torch.cuda.device_count() > 0 else 'N/A')\"" || echo "PyTorch verification failed"
+        
+    - name: Create Activation Script
+      shell: cmd
+      run: |
+        echo "Creating activation script..."
+        wsl bash -c "cat > ~/activate-origin-llm.sh << 'EOF'
+        #!/bin/bash
+        # Activate Origin LLM environment
+        cd ~/origin-llm
+        . venv/bin/activate
+        export PYTHONPATH=$PWD
+        echo 'Origin LLM environment activated!'
+        echo \"CUDA available: $(python -c \"import torch; print(torch.cuda.is_available())\" 2>/dev/null || echo 'torch not installed')\"
+        echo 'To test GPU: python -c \"import torch; print(torch.cuda.get_device_name(0))\"'
+        EOF"
+        wsl chmod +x ~/activate-origin-llm.sh
+        wsl bash -c "~/activate-origin-llm.sh && python -c 'import sys; print(sys.prefix)'" || echo "Activation script test failed"
