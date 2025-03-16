@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wsl-connector-config
+  namespace: governance-system
+data:
+  wsl-connector.sh: |
+    #!/bin/bash
+    
+    # WSL Connection script for Mikael's local machine
+    # This script establishes a secure connection to Mikael's WSL environment
+    # which is behind a firewall but accessible via Tailscale mesh network
+    # and registers it as a GitHub runner with specific governance capabilities
+    
+    set -e
+    
+    echo "Starting WSL connector for Mikael's environment..."
+    
+    # Set up Tailscale connection
+    echo "Setting up Tailscale connection..."
+    
+    # Write Tailscale auth key to file
+    echo "${TAILSCALE_AUTH_KEY}" > /tmp/tailscale-auth
+    
+    # Install and configure Tailscale (stateless mode)
+    tailscale up --authkey file:/tmp/tailscale-auth --hostname=origin-wsl-connector --advertise-exit-node=false
+    
+    # Wait for Tailscale to connect
+    echo "Waiting for Tailscale connection..."
+    until tailscale status | grep 'Connected'; do
+      echo "Waiting for Tailscale to connect..."
+      sleep 5
+    done
+    
+    echo "Tailscale connected successfully!"
+    
+    # Configure WSL connection
+    MIKAEL_WSL_HOST="${MIKAEL_WSL_HOST:-localhost}"
+    MIKAEL_WSL_PORT="${MIKAEL_WSL_PORT:-22}"
+    MIKAEL_WSL_USER="${MIKAEL_WSL_USER:-mikael}"
+    
+    # Ensure required environment variables are set
+    if [ -z "${RUNNER_TOKEN}" ]; then
+      echo "ERROR: RUNNER_TOKEN environment variable is required"
+      exit 1
+    fi
+    
+    if [ -z "${MIKAEL_SSH_KEY}" ]; then
+      echo "ERROR: MIKAEL_SSH_KEY environment variable is required"
+      exit 1
+    fi
+    
+    # Write SSH key to file
+    mkdir -p /tmp/.ssh
+    echo "${MIKAEL_SSH_KEY}" > /tmp/.ssh/id_ed25519
+    chmod 600 /tmp/.ssh/id_ed25519
+    
+    # Create the runner install script
+    cat > /tmp/setup-runner.sh << 'EOF'
+    #!/bin/bash
+    set -e
+    
+    # Create dedicated directory for the Origin runner
+    mkdir -p ~/origin-runner
+    cd ~/origin-runner
+    
+    # Download the latest runner package
+    echo "Downloading latest runner package..."
+    RUNNER_VERSION=$(curl -s https://api.github.com/repos/actions/runner/releases/latest | grep tag_name | cut -d '"' -f 4 | cut -c 2-)
+    if [ -z "$RUNNER_VERSION" ]; then
+      # Fallback to known version if API request fails
+      RUNNER_VERSION="2.303.0"
+    fi
+    
+    # Download based on architecture
+    ARCH=$(uname -m)
+    if [ "$ARCH" == "x86_64" ]; then
+      curl -o actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz -L https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+      tar xzf actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+    elif [ "$ARCH" == "aarch64" ] || [ "$ARCH" == "arm64" ]; then
+      curl -o actions-runner-linux-arm64-${RUNNER_VERSION}.tar.gz -L https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-arm64-${RUNNER_VERSION}.tar.gz
+      tar xzf actions-runner-linux-arm64-${RUNNER_VERSION}.tar.gz
+    else
+      echo "Unsupported architecture: $ARCH"
+      exit 1
+    fi
+    
+    # Set up the runner with explicit Origin repository configuration
+    echo "Configuring runner for the Origin repository..."
+    ./config.sh --url https://github.com/dndnordic/origin --token $1 --name "origin-wsl-governance" --labels "self-hosted,wsl,governance,origin-governance" --work _work --unattended
+    
+    # Install and start the runner service
+    echo "Installing runner as a service..."
+    sudo ./svc.sh install
+    
+    # Ensure the service is running
+    echo "Starting the runner service..."
+    sudo ./svc.sh start
+    
+    # Create a simple status check script
+    cat > ~/origin-runner-status.sh << 'STATUSEOF'
+    #!/bin/bash
+    
+    echo "=== Origin Runner Status Check ==="
+    echo "Time: $(date)"
+    
+    # Check runner service
+    SERVICE_STATUS=$(sudo systemctl is-active actions.runner.dndnordic-origin.* 2>/dev/null || echo "not found")
+    echo "Service status: $SERVICE_STATUS"
+    
+    # Check process
+    PROCESS_COUNT=$(pgrep -f Runner.Listener | wc -l)
+    echo "Runner processes: $PROCESS_COUNT"
+    
+    # Check connection to GitHub
+    if curl -s https://github.com/dndnordic/origin > /dev/null; then
+      echo "GitHub connectivity: OK"
+    else
+      echo "GitHub connectivity: FAILED"
+    fi
+    
+    # Show recent logs
+    echo -e "\nRecent logs:"
+    find ~/origin-runner/_diag -name "*.log" -type f -mtime -1 | xargs tail -n 20 2>/dev/null || echo "No recent logs found"
+    STATUSEOF
+    
+    chmod +x ~/origin-runner-status.sh
+    echo "Created status check script at ~/origin-runner-status.sh"
+    
+    echo "Runner successfully configured and started"
+    EOF
+    
+    # Make the script executable
+    chmod +x /tmp/setup-runner.sh
+    
+    # Copy the script to Mikael's WSL
+    echo "Copying setup script to Mikael's WSL machine..."
+    scp -i /tmp/.ssh/id_ed25519 -o StrictHostKeyChecking=no -P "${MIKAEL_WSL_PORT}" /tmp/setup-runner.sh "${MIKAEL_WSL_USER}@${MIKAEL_WSL_HOST}:~/setup-runner.sh"
+    
+    # Run the setup script on Mikael's WSL
+    echo "Setting up runner on Mikael's WSL..."
+    ssh -i /tmp/.ssh/id_ed25519 -o StrictHostKeyChecking=no -p "${MIKAEL_WSL_PORT}" "${MIKAEL_WSL_USER}@${MIKAEL_WSL_HOST}" "RUNNER_TOKEN='${RUNNER_TOKEN}' bash ~/setup-runner.sh" | tee /tmp/setup-log.txt
+    
+    # Wait for the runner to become active
+    echo "Waiting for the runner service to become active..."
+    for i in {1..12}; do
+      RUNNER_STATUS=$(ssh -i /tmp/.ssh/id_ed25519 -o StrictHostKeyChecking=no -p "${MIKAEL_WSL_PORT}" "${MIKAEL_WSL_USER}@${MIKAEL_WSL_HOST}" "sudo systemctl is-active actions.runner.dndnordic-origin.* || echo 'not-found'")
+      
+      if [ "$RUNNER_STATUS" = "active" ]; then
+        echo "✅ Runner service is now active!"
+        break
+      else
+        echo "⏳ Runner service status: $RUNNER_STATUS (attempt $i/12)"
+        sleep 10
+      fi
+    done
+    
+    # Keep the connection alive and monitor the runner
+    echo "WSL runner setup complete. Connecting to monitor status..."
+    ssh -i /tmp/.ssh/id_ed25519 -o StrictHostKeyChecking=no -p "${MIKAEL_WSL_PORT}" "${MIKAEL_WSL_USER}@${MIKAEL_WSL_HOST}" "bash -c 'echo \"Initial status check:\"; ~/origin-runner-status.sh; echo; echo \"Monitoring logs:\"; cd ~/origin-runner && tail -f _diag/Runner_*.log 2>/dev/null || (echo \"Waiting for log files...\"; while [ ! -f _diag/Runner_*.log ]; do sleep 5; done; tail -f _diag/Runner_*.log)'"

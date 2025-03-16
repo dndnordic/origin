@@ -1,0 +1,251 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vultr-backup-config
+  namespace: governance-system
+data:
+  setup-runner.sh: |
+    #!/bin/bash
+    
+    # Setup script for the Vultr backup GitHub runner
+    # This runner activates when Mikael's WSL connector is unavailable
+    
+    set -e
+    
+    echo "Starting Vultr backup runner setup..."
+    
+    # Create a directory for the runner
+    mkdir -p /home/runner/actions-runner
+    cd /home/runner/actions-runner
+    
+    # Download the latest runner package
+    echo "Downloading latest runner package..."
+    RUNNER_VERSION=$(curl -s https://api.github.com/repos/actions/runner/releases/latest | jq -r .tag_name | sed 's/^v//')
+    if [ -z "$RUNNER_VERSION" ]; then
+      # Fallback to known version if API request fails
+      RUNNER_VERSION="2.310.2"
+    fi
+    
+    # Download based on architecture
+    ARCH=$(uname -m)
+    if [ "$ARCH" == "x86_64" ]; then
+      curl -o actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz -L https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+      tar xzf actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+    elif [ "$ARCH" == "aarch64" ] || [ "$ARCH" == "arm64" ]; then
+      curl -o actions-runner-linux-arm64-${RUNNER_VERSION}.tar.gz -L https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-arm64-${RUNNER_VERSION}.tar.gz
+      tar xzf actions-runner-linux-arm64-${RUNNER_VERSION}.tar.gz
+    else
+      echo "Unsupported architecture: $ARCH"
+      exit 1
+    fi
+    
+    # Configure the runner
+    echo "Configuring runner for the Origin repository..."
+    ./config.sh --url https://github.com/dndnordic/origin --token "${RUNNER_TOKEN}" --name "vultr-backup-${POD_NAME}" --labels "${RUNNER_LABELS}" --unattended --ephemeral
+    
+    # Start the runner
+    echo "Starting runner in foreground mode..."
+    ./run.sh &
+    
+    # Allow time for the runner to register with GitHub
+    sleep 10
+    
+    # Setup health check endpoint
+    mkdir -p /home/runner/health
+    cat > /home/runner/health/server.py << 'EOF'
+    #!/usr/bin/env python3
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import os
+    import subprocess
+    import json
+    import time
+
+    class HealthServer(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == '/health':
+                # Basic health check
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                health_data = {
+                    "status": "healthy",
+                    "timestamp": time.time(),
+                    "component": "vultr-backup-connector"
+                }
+                self.wfile.write(json.dumps(health_data).encode())
+            elif self.path == '/readiness':
+                # Check if runner is registered and connected
+                runner_status = self._check_runner_status()
+                self.send_response(200 if runner_status.get("registered", False) else 503)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(runner_status).encode())
+            elif self.path == '/metrics':
+                # Prometheus metrics endpoint
+                self.send_response(200)
+                self.send_header('Content-type', 'text/plain')
+                self.end_headers()
+                metrics = self._generate_metrics()
+                self.wfile.write(metrics.encode())
+            elif self.path == '/status':
+                # Detailed status endpoint
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                status_data = self._get_status()
+                self.wfile.write(json.dumps(status_data).encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
+        
+        def _check_runner_status(self):
+            try:
+                # Check if the runner process is running
+                runner_process = subprocess.run(
+                    "pgrep -f Runner.Listener", 
+                    shell=True, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE
+                )
+                
+                # Check for _diag logs that indicate successful connection
+                logs_exist = os.path.exists("/home/runner/actions-runner/_diag")
+                
+                return {
+                    "registered": runner_process.returncode == 0,
+                    "logs_available": logs_exist,
+                    "process_running": runner_process.returncode == 0
+                }
+            except Exception as e:
+                return {
+                    "registered": False,
+                    "error": str(e)
+                }
+        
+        def _generate_metrics(self):
+            # Simple prometheus metrics
+            status = self._check_runner_status()
+            metrics = []
+            
+            # Runner up/down status
+            metrics.append(f"# HELP vultr_backup_runner_up Status of the Vultr backup runner")
+            metrics.append(f"# TYPE vultr_backup_runner_up gauge")
+            metrics.append(f"vultr_backup_runner_up {1 if status.get('registered', False) else 0}")
+            
+            # Active status
+            metrics.append(f"# HELP vultr_backup_runner_active Whether the backup runner is active (not in standby)")
+            metrics.append(f"# TYPE vultr_backup_runner_active gauge")
+            metrics.append(f"vultr_backup_runner_active {1 if os.environ.get('BACKUP_MODE') == 'active' else 0}")
+            
+            return "\n".join(metrics)
+        
+        def _get_status(self):
+            return {
+                "runner_status": self._check_runner_status(),
+                "mode": os.environ.get("BACKUP_MODE", "standby"),
+                "pod_name": os.environ.get("POD_NAME", "unknown"),
+                "namespace": os.environ.get("NAMESPACE", "unknown"),
+                "runner_labels": os.environ.get("RUNNER_LABELS", ""),
+                "uptime_seconds": time.time() - self.server.start_time
+            }
+
+    def run_server():
+        server_address = ('', 9090)
+        httpd = HTTPServer(server_address, HealthServer)
+        httpd.start_time = time.time()
+        print(f"Starting health check server on port 9090...")
+        httpd.serve_forever()
+
+    if __name__ == '__main__':
+        run_server()
+    EOF
+    
+    chmod +x /home/runner/health/server.py
+    
+    # Start health check server
+    cd /home/runner/health
+    python3 server.py &
+    
+    echo "Vultr backup runner setup complete"
+  
+  monitor-primary.sh: |
+    #!/bin/bash
+    
+    # This script monitors the primary WSL connector and activates the backup if needed
+    
+    echo "Starting primary connector monitoring..."
+    
+    while true; do
+      # Check if the primary connector is responsive
+      PRIMARY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://mikael-wsl-connector:8080/status || echo "unreachable")
+      
+      if [ "$PRIMARY_STATUS" != "200" ]; then
+        # Count failures
+        FAILURES=$((FAILURES+1))
+        echo "Primary connector check failed ($FAILURES/3): $PRIMARY_STATUS"
+        
+        if [ $FAILURES -ge 3 ]; then
+          echo "Primary connector appears to be down. Activating backup connector..."
+          export BACKUP_MODE=active
+          
+          # Check if runner is already running
+          if ! pgrep -f Runner.Listener > /dev/null; then
+            echo "Starting GitHub runner in backup mode..."
+            chmod +x /scripts/setup-runner.sh
+            /scripts/setup-runner.sh
+          else
+            echo "Runner is already running."
+          fi
+          
+          # Continue monitoring in case primary comes back online
+          FAILURES=0
+        fi
+      else
+        # Reset failure counter on success
+        FAILURES=0
+        
+        # If primary is back and we're active, we could deactivate
+        # But for now let's keep running once activated to avoid flapping
+        if [ "$BACKUP_MODE" = "active" ]; then
+          echo "Primary connector is back online, but keeping backup active to avoid flapping."
+        else
+          echo "Primary connector is healthy."
+        fi
+      fi
+      
+      # Check less frequently if we're in active mode (avoid unnecessary requests)
+      if [ "$BACKUP_MODE" = "active" ]; then
+        sleep 300
+      else
+        sleep 60
+      fi
+    done
+  
+  health-check.sh: |
+    #!/bin/bash
+    
+    # This script performs health checks on the backup runner
+    
+    # Check if runner process is running
+    if ! pgrep -f Runner.Listener > /dev/null; then
+      echo "Runner process not found. Attempting to restart..."
+      
+      # Check if config file exists (indicating it was set up previously)
+      if [ -f /home/runner/actions-runner/.runner ]; then
+        cd /home/runner/actions-runner
+        
+        # Try to restart the runner
+        echo "Restarting runner..."
+        ./run.sh &
+      else
+        echo "Runner was never properly configured. Running setup script..."
+        /scripts/setup-runner.sh
+      fi
+    fi
+    
+    # Check if our health server is running
+    if ! pgrep -f "server.py" > /dev/null; then
+      echo "Health check server not running. Restarting..."
+      cd /home/runner/health
+      python3 server.py &
+    fi

@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: origin
+  namespace: governance-system
+spec:
+  template:
+    spec:
+      nodeSelector:
+        cloud.provider/zone: "vultr-nj"
+      tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "governance"
+        effect: "NoSchedule"

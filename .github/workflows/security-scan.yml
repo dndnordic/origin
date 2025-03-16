@@ -1,0 +1,81 @@
+name: Security Scan
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    name: Security Scan
+    runs-on: [self-hosted, Linux, Docker, X64, builder]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python and dependencies
+        run: |
+          # Use existing Python
+          python3 --version
+          
+          # Install pip if needed
+          command -v pip3 || {
+            curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+            python3 /tmp/get-pip.py --user
+            export PATH=$HOME/.local/bin:$PATH
+          }
+          
+          # Install pip packages (user-level install)
+          pip3 install --user bandit safety
+          pip3 install --user -r requirements.txt
+
+      - name: Run Bandit (SAST)
+        run: |
+          bandit -r ./src -f json -o bandit-results.json
+          echo "Bandit scan complete"
+      
+      - name: Check for secrets 
+        run: |
+          # Simple scan for potential hardcoded secrets using grep
+          ! grep -r --include="*.py" --include="*.yml" --include="*.yaml" -E "(password|secret|token|key).*=.*['\"].*['\"]" ./src
+          echo "Secrets scan complete"
+      
+      - name: Dependency vulnerability scan
+        run: |
+          safety check --full-report
+          echo "Dependency scan complete"
+          
+      - name: Generate security report
+        run: |
+          echo "## Security Scan Results" > security-report.md
+          echo "" >> security-report.md
+          
+          echo "### SAST Results" >> security-report.md
+          echo "" >> security-report.md
+          echo "\`\`\`" >> security-report.md
+          jq -r '.results | length' bandit-results.json | xargs -I {} echo "Total issues found: {}" >> security-report.md
+          echo "\`\`\`" >> security-report.md
+          
+          echo "### Dependency Check" >> security-report.md
+          echo "" >> security-report.md
+          echo "\`\`\`" >> security-report.md
+          safety check --output text >> security-report.md || true
+          echo "\`\`\`" >> security-report.md
+      
+      - name: Post results as comment
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          cat security-report.md
+          
+          # Only comment on the PR if we're running on a PR
+          if [ ! -z "$PR_NUMBER" ]; then
+            gh pr comment $PR_NUMBER --body-file security-report.md
+          fi

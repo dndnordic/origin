@@ -1,0 +1,113 @@
+{% extends "layout.html" %}
+
+{% block title %}Proposals - Mikael's Governance System{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-clipboard-list me-2"></i>Proposals</h1>
+        <div>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-primary active" id="btn-all">All</button>
+                <button type="button" class="btn btn-outline-primary" id="btn-pending">Pending</button>
+                <button type="button" class="btn btn-outline-primary" id="btn-approved">Approved</button>
+                <button type="button" class="btn btn-outline-primary" id="btn-rejected">Rejected</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="proposals-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Title</th>
+                            <th>Submitter</th>
+                            <th>Submission Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for proposal in proposals %}
+                        <tr class="proposal-row" data-status="{{ proposal.status }}">
+                            <td>{{ proposal.proposal_id }}</td>
+                            <td>{{ proposal.title }}</td>
+                            <td>{{ proposal.submitter }}</td>
+                            <td>{{ proposal.submission_time }}</td>
+                            <td>
+                                {% if proposal.status == 'pending' %}
+                                <span class="badge bg-primary">Pending</span>
+                                {% elif proposal.status == 'approved' %}
+                                <span class="badge bg-success">Approved</span>
+                                {% elif proposal.status == 'rejected' %}
+                                <span class="badge bg-danger">Rejected</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('view_proposal', proposal_id=proposal.proposal_id) }}" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-eye"></i> View
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            {% if not proposals %}
+            <div class="alert alert-info mb-0">
+                <i class="fas fa-info-circle me-2"></i>
+                No proposals found.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Filter buttons
+        const btnAll = document.getElementById('btn-all');
+        const btnPending = document.getElementById('btn-pending');
+        const btnApproved = document.getElementById('btn-approved');
+        const btnRejected = document.getElementById('btn-rejected');
+        const rows = document.querySelectorAll('.proposal-row');
+        
+        // Filter function
+        function filterProposals(status) {
+            rows.forEach(row => {
+                if (status === 'all' || row.dataset.status === status) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            
+            // Update active button
+            btnAll.classList.remove('active');
+            btnPending.classList.remove('active');
+            btnApproved.classList.remove('active');
+            btnRejected.classList.remove('active');
+            
+            if (status === 'all') btnAll.classList.add('active');
+            else if (status === 'pending') btnPending.classList.add('active');
+            else if (status === 'approved') btnApproved.classList.add('active');
+            else if (status === 'rejected') btnRejected.classList.add('active');
+        }
+        
+        // Add event listeners
+        btnAll.addEventListener('click', () => filterProposals('all'));
+        btnPending.addEventListener('click', () => filterProposals('pending'));
+        btnApproved.addEventListener('click', () => filterProposals('approved'));
+        btnRejected.addEventListener('click', () => filterProposals('rejected'));
+        
+        // Initialize with all proposals
+        filterProposals('all');
+    });
+</script>
+{% endblock %}

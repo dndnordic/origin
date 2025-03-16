@@ -43,37 +43,99 @@ class ImmuDBManager:
         """Initialize the ImmuDB manager with configuration."""
         self.config = config or {}
         
-        # Default configuration
-        self.host = self.config.get('host', os.environ.get('IMMUDB_HOST', 'localhost'))
-        self.port = int(self.config.get('port', os.environ.get('IMMUDB_PORT', '3322')))
+        # Support for connection string with multiple endpoints for high availability
+        connection_string = os.environ.get('IMMUDB_CONNECTION_STRING', '')
+        if connection_string:
+            # Parse connection string format: "host1:port1,host2:port2,..."
+            self.endpoints = []
+            for endpoint in connection_string.split(','):
+                if ':' in endpoint:
+                    host, port = endpoint.strip().split(':')
+                    self.endpoints.append((host, int(port)))
+                else:
+                    self.endpoints.append((endpoint.strip(), 3322))  # Default port
+            
+            # Use first endpoint as default, will try others on connection failure
+            self.host, self.port = self.endpoints[0] if self.endpoints else ('localhost', 3322)
+        else:
+            # Legacy single endpoint configuration
+            self.host = self.config.get('host', os.environ.get('IMMUDB_HOST', 'localhost'))
+            self.port = int(self.config.get('port', os.environ.get('IMMUDB_PORT', '3322')))
+            self.endpoints = [(self.host, self.port)]
+        
         self.user = self.config.get('user', os.environ.get('IMMUDB_USER', 'immudb'))
         self.password = self.config.get('password', os.environ.get('IMMUDB_PASSWORD', 'immudb'))
         self.database = self.config.get('database', os.environ.get('IMMUDB_DATABASE', 'governance'))
         
+        # Connection retry settings
+        self.max_retries = int(self.config.get('max_retries', os.environ.get('IMMUDB_MAX_RETRIES', '3')))
+        self.retry_delay = float(self.config.get('retry_delay', os.environ.get('IMMUDB_RETRY_DELAY', '2.0')))
+        
         # Connect to ImmuDB
-        self.client = self._connect_to_immudb()
+        self.client = None
+        self._connect_with_retry()
         
-        logger.info(f"ImmuDB manager initialized - connected to {self.host}:{self.port}")
+        logger.info(f"ImmuDB manager initialized - connected to {self.host}:{self.port} (with {len(self.endpoints)} total endpoints)")
     
-    def _connect_to_immudb(self) -> ImmudbClient:
-        """
-        Connect to ImmuDB server.
+    def _connect_with_retry(self) -> None:
+        """Connect to ImmuDB with retry logic and failover to other endpoints."""
+        # Try all endpoints with retries
+        exceptions = []
         
+        for endpoint_idx, (host, port) in enumerate(self.endpoints):
+            self.host, self.port = host, port
+            
+            for attempt in range(self.max_retries):
+                try:
+                    self.client = self._connect_to_endpoint(host, port)
+                    if self.client:
+                        logger.info(f"Successfully connected to ImmuDB at {host}:{port} (endpoint {endpoint_idx+1}/{len(self.endpoints)}, attempt {attempt+1})")
+                        return
+                except Exception as e:
+                    exceptions.append(f"Endpoint {host}:{port} attempt {attempt+1}: {str(e)}")
+                    logger.warning(f"Failed to connect to ImmuDB at {host}:{port}, attempt {attempt+1}/{self.max_retries}: {e}")
+                    time.sleep(self.retry_delay)
+        
+        # All connection attempts failed
+        error_msg = f"Failed to connect to any ImmuDB endpoint after {self.max_retries} retries per endpoint.\nErrors: {exceptions}"
+        logger.error(error_msg)
+        # In development, use mock client
+        if os.environ.get('ENVIRONMENT') == 'development':
+            self.client = ImmudbClient()
+        else:
+            # In production, raise exception as this is critical
+            raise ConnectionError(error_msg)
+    
+    def _connect_to_endpoint(self, host: str, port: int) -> ImmudbClient:
+        """
+        Connect to a specific ImmuDB endpoint.
+        
+        Args:
+            host: ImmuDB hostname
+            port: ImmuDB port
+            
         Returns:
             ImmudbClient: Connected ImmuDB client
-        """
-        try:
-            client = ImmudbClient(self.host, self.port)
-            client.login(self.user, self.password)
-            # TODO: Create database if it doesn't exist
             
-            logger.info(f"Connected to ImmuDB at {self.host}:{self.port}")
-            return client
+        Raises:
+            Exception: If connection fails
+        """
+        client = ImmudbClient(host, port)
+        client.login(self.user, self.password)
+        # TODO: Create database if it doesn't exist
+        
+        # Test connection with a simple operation
+        try:
+            # Try to get server info or similar non-destructive operation
+            # This depends on the ImmuDB client capabilities
+            # client.serverInfo()  # Placeholder for actual API call
+            pass
         except Exception as e:
-            logger.error(f"Error connecting to ImmuDB: {e}")
-            # For development or testing, we'll return a mock client
-            # In production, you might want to raise an exception
-            return ImmudbClient()
+            logger.error(f"Connection test failed for {host}:{port}: {e}")
+            raise
+            
+        logger.info(f"Connected to ImmuDB at {host}:{port}")
+        return client
     
     def store_record(self, record_type: str, authority: str, 
                    content: Dict[str, Any]) -> Optional[str]:
