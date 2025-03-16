@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vultr-backup-connector
+  namespace: governance-system
+  labels:
+    app: vultr-backup-connector
+    component: backup
+    tier: infrastructure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vultr-backup-connector
+  template:
+    metadata:
+      labels:
+        app: vultr-backup-connector
+        component: backup
+        tier: infrastructure
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9090"
+    spec:
+      # Don't schedule on the same node as the primary connector
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - mikael-wsl-connector
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: vultr-backup-connector
+        image: registry.vultr.dndnordic.com/governance-runner:latest
+        securityContext:
+          privileged: false
+          runAsUser: 1000
+          runAsGroup: 1000
+          readOnlyRootFilesystem: false
+        ports:
+        - containerPort: 9090
+          name: metrics
+        command: ["sh", "-c"]
+        args: 
+        - |
+          # Wait for primary connector to be running before starting backup
+          echo "Checking if primary connector is running..."
+          
+          # Lookup the primary connector service
+          PRIMARY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://mikael-wsl-connector:8080/status || echo "unreachable")
+          
+          if [ "$PRIMARY_STATUS" = "200" ]; then
+            echo "Primary connector is active. Entering standby mode..."
+            # Start monitoring the primary connector
+            /scripts/monitor-primary.sh &
+          else
+            echo "Primary connector appears to be unavailable. Starting backup connector..."
+            BACKUP_MODE=active
+          fi
+          
+          # If active or if primary fails during operation
+          if [ "$BACKUP_MODE" = "active" ]; then
+            echo "Starting GitHub runner in backup mode..."
+            chmod +x /scripts/setup-runner.sh
+            /scripts/setup-runner.sh
+            
+            # Keep container running and monitor health
+            while true; do
+              /scripts/health-check.sh
+              sleep 60
+            done
+          else
+            # Passive monitoring mode - container stays alive waiting for activation
+            while true; do
+              echo "Backup connector in standby mode - $(date)"
+              sleep 300
+            done
+          fi
+        env:
+        - name: RUNNER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: github-runner-token
+        - name: VULTR_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: vultr-api-key
+        - name: RUNNER_LABELS
+          value: "self-hosted,vultr,backup,origin-backup"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+        - name: runner-data
+          mountPath: /home/runner
+        - name: docker-socket
+          mountPath: /var/run/docker.sock
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+      imagePullSecrets:
+      - name: vultr-registry-credentials
+      volumes:
+      - name: scripts
+        configMap:
+          name: vultr-backup-config
+          defaultMode: 0755
+      - name: runner-data
+        emptyDir: {}
+      - name: docker-socket
+        hostPath:
+          path: /var/run/docker.sock

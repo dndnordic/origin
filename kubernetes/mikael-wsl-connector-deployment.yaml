@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mikael-wsl-connector
+  namespace: governance-system
+  labels:
+    app: mikael-wsl-connector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mikael-wsl-connector
+  template:
+    metadata:
+      labels:
+        app: mikael-wsl-connector
+    spec:
+      containers:
+      - name: connector
+        image: registry.vultr.dndnordic.com/tailscale-ssh:latest
+        securityContext:
+          capabilities:
+            add:
+              - NET_ADMIN
+              - NET_RAW
+        command: ["sh", "-c"]
+        args: 
+        - |
+          apk add --no-cache openssh-client bash curl jq tailscale
+          chmod +x /scripts/wsl-connector.sh
+          /scripts/wsl-connector.sh
+        env:
+        - name: MIKAEL_WSL_HOST
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: mikael-wsl-host
+        - name: MIKAEL_WSL_PORT
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: mikael-wsl-port
+        - name: MIKAEL_WSL_USER
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: mikael-wsl-user
+        - name: MIKAEL_SSH_KEY
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: mikael-ssh-key
+        - name: RUNNER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: github-runner-token
+        - name: TAILSCALE_AUTH_KEY
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: tailscale-auth-key
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+      imagePullSecrets:
+      - name: vultr-registry-credentials
+      volumes:
+      - name: scripts
+        configMap:
+          name: wsl-connector-config
+          defaultMode: 0755

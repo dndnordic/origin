@@ -1,0 +1,49 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespacePrefix: governance-
+
+resources:
+- namespace.yaml
+- origin-deployment.yaml
+- origin-service.yaml
+- origin-pvc.yaml
+- origin-configmap.yaml
+- immutable-db-statefulset.yaml
+- immutable-db-service.yaml
+- secrets.yaml
+- ingress.yaml
+- github-runner-deployment.yaml
+- mikael-wsl-connector-configmap.yaml
+- mikael-wsl-connector-deployment.yaml
+- vultr-backup-connector-deployment.yaml
+- vultr-backup-configmap.yaml
+- vultr-backup-service.yaml
+- docker-registry-config.yaml
+- registry-credentials.yaml
+
+commonLabels:
+  app.kubernetes.io/name: origin
+  app.kubernetes.io/instance: origin-governance
+  app.kubernetes.io/part-of: dndnordic-governance
+  
+configMapGenerator:
+- name: runner-docs
+  files:
+  - SETUP-WSL-RUNNER.md
+
+patchesJson6902:
+# Ability to override resource configurations for different environments
+# Will be used for HA in the future
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: immutable-db
+  path: patches/immutable-db-patch.json
+- target:
+    group: apps
+    version: v1 
+    kind: Deployment
+    name: origin
+  path: patches/origin-patch.json

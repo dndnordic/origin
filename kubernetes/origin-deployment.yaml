@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: origin
+  namespace: governance-system
+  labels:
+    app: origin
+    component: governance
+    tier: application
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: origin
+  template:
+    metadata:
+      labels:
+        app: origin
+        component: governance
+        tier: application
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
+    spec:
+      # Ensure pods are spread across different nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - origin
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: origin
+        image: registry.vultr.dndnordic.com/origin:latest
+        ports:
+        - containerPort: 8000
+          name: api
+        - containerPort: 5000
+          name: web
+        - containerPort: 9090
+          name: metrics
+        env:
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: github-token
+        - name: GITHUB_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: github-webhook-secret
+        - name: MIKAEL_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: mikael-auth-token
+        - name: DND_GENESIS_GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: origin-secrets
+              key: dnd-genesis-github-token
+        # Database connection strings support multiple endpoints for redundancy
+        - name: IMMUDB_CONNECTION_STRING
+          value: "immutable-db-0.immutable-db.governance-system.svc.cluster.local:3322,immutable-db-1.immutable-db.governance-system.svc.cluster.local:3322"
+        - name: DATABASE_HOST
+          value: "immutable-db-0.immutable-db"
+        - name: DATABASE_PORT
+          value: "3322"
+        # Support future database additions
+        - name: EVENT_STORE_CONNECTION_STRING
+          value: "$(EVENT_STORE_USERNAME):$(EVENT_STORE_PASSWORD)@event-store.governance-system.svc.cluster.local:2113"
+        - name: POSTGRESQL_CONNECTION_STRING
+          value: "postgresql://$(POSTGRESQL_USERNAME):$(POSTGRESQL_PASSWORD)@timescaledb.governance-system.svc.cluster.local:5432/origin"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: ENVIRONMENT
+          value: "production"
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+        volumeMounts:
+        - name: origin-data
+          mountPath: /data
+        - name: config-volume
+          mountPath: /app/config
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+      imagePullSecrets:
+      - name: vultr-registry-credentials
+      # Shared configmap volume for non-sensitive configuration
+      volumes:
+      - name: config-volume
+        configMap:
+          name: origin-config
+      - name: origin-data
+        persistentVolumeClaim:
+          claimName: origin-pvc
