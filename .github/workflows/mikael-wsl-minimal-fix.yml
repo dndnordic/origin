@@ -1,0 +1,63 @@
+name: Mikael WSL Minimal Setup (Fixed)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-wsl-minimal:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Test WSL Environment
+      shell: cmd
+      run: |
+        echo Testing WSL environment...
+        wsl uname -a
+        wsl whoami
+        
+    - name: Test GPU Access
+      shell: cmd
+      run: |
+        echo Testing NVIDIA GPU...
+        wsl nvidia-smi
+        
+    - name: Create Python Test Script
+      shell: cmd
+      run: |
+        echo Creating python test script...
+        wsl echo "import os" > ~/test-env.py
+        wsl echo "import sys" >> ~/test-env.py
+        wsl echo "import platform" >> ~/test-env.py
+        wsl echo "" >> ~/test-env.py
+        wsl echo "print(f\"Hostname: {platform.node()}\")" >> ~/test-env.py
+        wsl echo "print(f\"Python version: {sys.version}\")" >> ~/test-env.py
+        wsl echo "print(f\"Platform: {platform.platform()}\")" >> ~/test-env.py
+        wsl echo "print(f\"Working directory: {os.getcwd()}\")" >> ~/test-env.py
+        wsl echo "" >> ~/test-env.py
+        wsl echo "# Check for NVIDIA driver" >> ~/test-env.py
+        wsl echo "print(\"\\nChecking for NVIDIA driver:\")" >> ~/test-env.py
+        wsl echo "result = os.popen('nvidia-smi').read()" >> ~/test-env.py
+        wsl echo "print(result)" >> ~/test-env.py
+        wsl chmod +x ~/test-env.py
+        
+    - name: Run Test Script
+      shell: cmd
+      run: |
+        echo Running test script...
+        wsl python3 ~/test-env.py || wsl python ~/test-env.py
+        
+    - name: Install Basic Packages
+      shell: cmd
+      run: |
+        echo Installing basic packages...
+        wsl sudo apt-get update && wsl sudo apt-get install -y python3-pip python3-venv curl wget git
+        
+    - name: Setup Minimal Test Environment
+      shell: cmd
+      run: |
+        echo Setting up minimal test environment...
+        wsl mkdir -p ~/origin-test
+        wsl echo "Test successful" > ~/origin-test/setup-complete.txt
+        wsl cat ~/origin-test/setup-complete.txt
