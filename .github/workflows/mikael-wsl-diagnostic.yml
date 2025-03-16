@@ -1,0 +1,61 @@
+name: Mikael WSL Diagnostic
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose-wsl:
+    runs-on: [self-hosted, Windows, WSL, GPU]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Check Windows Environment
+      shell: cmd
+      run: |
+        echo "Windows environment information:"
+        systeminfo | findstr /C:"OS"
+        systeminfo | findstr /C:"System Type"
+        echo "-----------------------------------"
+        echo "Checking WSL installation:"
+        wsl --status || echo "WSL status command failed"
+        wsl --list --verbose || echo "WSL list command failed"
+        
+    - name: Check WSL Environment
+      shell: cmd
+      run: |
+        echo "Attempting to run basic WSL commands..."
+        wsl uname -a || echo "uname command failed"
+        wsl whoami || echo "whoami command failed"
+        
+    - name: Check GPU Access
+      shell: cmd
+      run: |
+        echo "Checking GPU access in WSL..."
+        wsl nvidia-smi || echo "nvidia-smi command failed"
+        
+    - name: Check WSL Network
+      shell: cmd
+      run: |
+        echo "Checking WSL network connectivity..."
+        wsl ip addr || echo "ip addr command failed"
+        wsl ping -c 3 google.com || echo "ping command failed"
+        
+    - name: Check WSL Python
+      shell: cmd
+      run: |
+        echo "Checking Python installation in WSL..."
+        wsl python --version || echo "python command failed"
+        wsl python3 --version || echo "python3 command failed"
+        wsl python -c "import sys; print(sys.executable)" || echo "python path command failed"
+        
+    - name: Create Diagnostic File
+      shell: cmd
+      run: |
+        echo "Creating diagnostic file in WSL home directory..."
+        wsl bash -c "echo 'Diagnostic test run on $(date)' > ~/wsl-diagnostic.txt"
+        wsl bash -c "echo 'WSL version information:' >> ~/wsl-diagnostic.txt"
+        wsl bash -c "uname -a >> ~/wsl-diagnostic.txt"
+        wsl bash -c "echo 'GPU information:' >> ~/wsl-diagnostic.txt"
+        wsl bash -c "nvidia-smi >> ~/wsl-diagnostic.txt || echo 'nvidia-smi failed' >> ~/wsl-diagnostic.txt"
+        wsl bash -c "cat ~/wsl-diagnostic.txt"
