@@ -9,18 +9,18 @@ jobs:
     
     steps:
     - name: Check Environment
-      shell: pwsh
+      shell: cmd
       run: |
-        echo "Running on: $env:COMPUTERNAME"
+        echo Running on: %COMPUTERNAME%
         wsl bash -c "uname -a"
         
     - name: Check Python
-      shell: pwsh
+      shell: cmd
       run: |
         wsl bash -c "python3 --version"
         wsl bash -c "python3 -c 'import sys; print(sys.path)'"
         
     - name: Check GPU
-      shell: pwsh
+      shell: cmd
       run: |
-        wsl bash -c "nvidia-smi || echo 'NVIDIA tools not installed'"
+        wsl bash -c "command -v nvidia-smi && nvidia-smi || echo 'NVIDIA tools not installed'"
