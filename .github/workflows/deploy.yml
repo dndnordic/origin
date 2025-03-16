@@ -47,18 +47,27 @@ jobs:
     
     - name: Build and push Origin Components
       run: |
-        # Build and push LLM Service
-        docker build -t registry.vultr.dndnordic.com/origin-llm:latest -t registry.vultr.dndnordic.com/origin-llm:${{ github.sha }} ./llm-service
-        docker push registry.vultr.dndnordic.com/origin-llm:latest
-        docker push registry.vultr.dndnordic.com/origin-llm:${{ github.sha }}
+        # Build governance component from source directly
+        mkdir -p governance-build
+        cp -r src/governance governance-build/
+        cp requirements.txt governance-build/
         
-        # Build and push Governance Service
-        docker build -t registry.vultr.dndnordic.com/origin-governance:latest -t registry.vultr.dndnordic.com/origin-governance:${{ github.sha }} ./governance
+        cat > governance-build/Dockerfile << EOF
+        FROM python:3.10-slim
+        WORKDIR /app
+        COPY requirements.txt .
+        RUN pip install --no-cache-dir -r requirements.txt
+        COPY . .
+        CMD ["python", "-m", "governance.governance_manager"]
+        EOF
+        
+        docker build -t registry.vultr.dndnordic.com/origin-governance:latest -t registry.vultr.dndnordic.com/origin-governance:${{ github.sha }} ./governance-build
         docker push registry.vultr.dndnordic.com/origin-governance:latest
         docker push registry.vultr.dndnordic.com/origin-governance:${{ github.sha }}
         
         # Clean up
         docker image prune -f
+        rm -rf governance-build
     
   deploy:
     needs: [build-origin, build-origin-components]
